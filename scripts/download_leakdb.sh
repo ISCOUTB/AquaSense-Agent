@@ -18,14 +18,14 @@ echo "Destino: $DATA_DIR"
 echo ""
 
 # Verificar si ya existe (cache de Docker layer)
-if [ -f "$DATA_DIR/Nodes.csv" ] && [ -f "$DATA_DIR/Pipes.csv" ] && [ -f "$DATA_DIR/Labels.csv" ]; then
+# Buscar archivos clave en cualquier subdirectorio
+if find "$DATA_DIR" -name "Nodes.csv" -o -name "Pipes.csv" -o -name "Labels.csv" 2>/dev/null | grep -q .; then
     echo "✅ Dataset ya existe (cache de Docker), saltando descarga"
-    ls -la "$DATA_DIR"
+    find "$DATA_DIR" -name "*.csv" | head -10
     exit 0
 fi
 
-echo "⬇️  Descargando (~505 MB)..."
-# wget con progreso, timeout y reintentos
+echo "⬇️  Descargando (~76 MB)..."
 wget --progress=bar:force:noscroll \
      --timeout=30 \
      --tries=3 \
@@ -41,9 +41,18 @@ fi
 
 echo ""
 echo "📦 Extrayendo..."
-unzip -q -o /tmp/Hanoi_CMH.zip -d "$DATA_DIR"
+# Extraer a directorio temporal primero
+TMP_EXTRACT="/tmp/leakdb_extract"
+rm -rf "$TMP_EXTRACT"
+mkdir -p "$TMP_EXTRACT"
+unzip -q -o /tmp/Hanoi_CMH.zip -d "$TMP_EXTRACT"
 
-# Verificar estructura esperada
+echo "🔍 Buscando archivos CSV en la extracción..."
+# El ZIP puede tener estructura Hanoi_CMH/Scenario-1/, etc.
+# Buscar y copiar todos los CSV al DATA_DIR plano
+find "$TMP_EXTRACT" -name "*.csv" -exec cp {} "$DATA_DIR"/ \;
+
+# Verificar archivos clave
 REQUIRED_FILES=("Nodes.csv" "Pipes.csv" "Labels.csv")
 MISSING=0
 for f in "${REQUIRED_FILES[@]}"; do
@@ -54,16 +63,20 @@ for f in "${REQUIRED_FILES[@]}"; do
 done
 
 if [ $MISSING -eq 1 ]; then
-    echo "❌ Estructura inesperada. Contenido de $DATA_DIR:"
-    find "$DATA_DIR" -type f | head -20
+    echo "❌ No se encontraron todos los archivos requeridos."
+    echo "   Contenido de $DATA_DIR:"
+    ls -la "$DATA_DIR"/*.csv 2>/dev/null | head -20
+    echo "   Contenido de extracción temporal:"
+    find "$TMP_EXTRACT" -name "*.csv" | head -20
     exit 1
 fi
 
 echo ""
-echo "✅ Dataset LeakDB Hanoi_CMH listo:"
+echo "✅ Dataset LeakDB Hanoi_CMH listo (archivos CSV en raíz):"
 ls -la "$DATA_DIR"/*.csv
 
-# Limpiar ZIP temporal
+# Limpiar
 rm -f /tmp/Hanoi_CMH.zip
+rm -rf "$TMP_EXTRACT"
 
 echo "=========================================="
