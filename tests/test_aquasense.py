@@ -212,8 +212,12 @@ def test_las_metricas_del_informe_estan_en_rango():
     if not informe.exists():
         pytest.skip("falta logs/train_report.json (ejecuta train.py)")
     rep = json.loads(informe.read_text(encoding="utf-8"))
+    val = rep["validacion"]
 
-    for c in rep["validacion"]["curva_compromiso"]:
+    for c in val["curva_umbral_global"]:
+        for campo in ("accuracy", "precision", "recall", "f1", "fbeta"):
+            assert 0.0 <= c[campo] <= 1.0, (campo, c)
+    for c in val["curva_percentiles"]:
         for campo in ("accuracy", "precision", "recall", "f1", "fbeta"):
             assert 0.0 <= c[campo] <= 1.0, (campo, c)
 
@@ -221,6 +225,37 @@ def test_las_metricas_del_informe_estan_en_rango():
     assert 0.0 <= base <= 1.0
     # La base trivial de "siempre normal" es la proporcion de clase 0.
     assert abs(base - (1 - rep["datos"]["pct_fuga"])) < 0.01
+
+
+@requiere_datos
+def test_los_dos_escenarios_de_despliegue_estan_reportados():
+    """Deben existir los dos, con metricas coherentes entre si."""
+    import json
+
+    informe = RAIZ / "logs" / "train_report.json"
+    if not informe.exists():
+        pytest.skip("falta logs/train_report.json (ejecuta train.py)")
+    val = json.loads(informe.read_text(encoding="utf-8"))["validacion"]
+    dep = val["escenarios_despliegue"]
+
+    assert "A_red_nueva" in dep and "B_red_conocida" in dep
+    a, b = dep["A_red_nueva"], dep["B_red_conocida"]
+
+    # A no puede calibrar: su umbral es un escalar global.
+    assert a["metodo_umbral"] == "global"
+    assert 0.0 < a["umbral"] < 1.0
+
+    # B calibra por red: cada red tiene el suyo.
+    assert b["metodo_umbral"] == "percentil_del_historico_propio"
+    assert len({e["umbral"] for e in b["por_escenario"].values()}) > 1
+
+    for esc in ("A_red_nueva", "B_red_conocida"):
+        m = dep[esc]["metricas"]
+        assert 0.0 <= m["accuracy"] <= 1.0
+        assert 0.0 <= m["f1"] <= 1.0
+        # La matriz de confusion debe cuadrar con el total evaluado.
+        cm = dep[esc]["matriz_confusion"]
+        assert sum(sum(fila) for fila in cm) == m["n_muestras"]
 
 
 def test_umbral_dentro_de_rango():

@@ -301,7 +301,22 @@ def main(argv: list[str] | None = None) -> int:
     print("  Calculando la probabilidad de fuga fuera de muestra de cada fila...\n")
     prob_oof = predicciones_fuera_de_muestra(ds, a.n_estimators, a.balance, a.seed)
 
-    print("\n  1. CURVA DE COMPROMISO (predicciones fuera de muestra)")
+    print("""
+  ESCENARIOS DE DESPLIEGUE
+  ------------------------------------------------------------------------
+  No son dos formas de medir lo mismo. Son dos preguntas distintas y dan
+  cifras distintas, asi que se reportan por separado.
+
+  A) RED NUEVA. El operador recibe una red de la que no tiene ningun dato.
+     Entrena con otras redes y no puede CALIBRAR: sin historico de esa red
+     no hay forma de saber a partir de que puntuacion es anomala. Usa por
+     tanto un umbral global, elegido sobre las redes de entrenamiento.
+
+  B) RED CONOCIDA. El operador ya tiene historico de esa red. Vigila 30 dias
+     declarados sin fugas, y con eso fija SU umbral. Es el caso real de una
+     empresa de agua: siempre conoce su red.
+""")
+
     print(f"  {'umbral':>8}{'exactitud':>11}{'precision':>11}{'recall':>9}"
           f"{'F1':>8}{'F-beta':>9}{'alertas':>11}")
     print("  " + "-" * 67)
@@ -309,26 +324,26 @@ def main(argv: list[str] | None = None) -> int:
     elegido = max(curva, key=lambda c: c["fbeta"])
     th = elegido["umbral"]
     for c in curva:
-        marca = "  <-- elegido" if c["umbral"] == th else ""
+        marca = "  <-- punto A" if c["umbral"] == th else ""
         print(f"  {c['umbral']:>8.3f}{c['accuracy']:>11.4f}{c['precision']:>11.4f}"
               f"{c['recall']:>9.4f}{c['f1']:>8.4f}{c['fbeta']:>9.4f}"
               f"{c['n_alertas']:>11,}{marca}")
 
     ev = evaluar_en_umbral(ds, prob_oof, th)
-
-    print(f"\n  2. PUNTO DE OPERACION: umbral {th} (maximiza F-beta={a.beta})")
     g = ev["global"]
-    print(f"     Global      : exactitud={g['accuracy']:.4f} precision={g['precision']:.4f} "
-          f"recall={g['recall']:.4f} F1={g['f1']:.4f} AUC={g['auc']}")
+
+    print(f"\n  A) RED NUEVA - umbral global {th} (sin poder calibrar)")
     m = ev["media_por_escenario"]
     mc = ev["media_solo_con_fuga"]
+    print(f"     Global      : exactitud={g['accuracy']:.4f} precision={g['precision']:.4f} "
+          f"recall={g['recall']:.4f} F1={g['f1']:.4f} AUC={g['auc']}")
     print(f"     Media folds : exactitud={m['accuracy']:.4f} precision={m['precision']:.4f} "
           f"recall={m['recall']:.4f} F1={m['f1']:.4f}")
     if mc:
         print(f"     Solo fuga   : exactitud={mc['accuracy']:.4f} precision={mc['precision']:.4f} "
               f"recall={mc['recall']:.4f} F1={mc['f1']:.4f}")
 
-    print("\n  3. POR ESCENARIO (ninguno visto en su propio entrenamiento)")
+    print("\n     Por red:")
     print(f"  {'Escenario':<12}{'exactitud':>10}{'precision':>11}{'recall':>9}"
           f"{'F1':>8}{'AUC':>8}{'alertas':>10}")
     print("  " + "-" * 68)
@@ -338,31 +353,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {esc:<12}{e['accuracy']:>10.4f}{e['precision']:>11.4f}"
               f"{e['recall']:>9.4f}{e['f1']:>8.4f}{auc:>8}{e['n_alertas']:>10,}{control}")
 
-    print("\n  4. MATRIZ DE CONFUSION GLOBAL")
     cm = np.array(g["matriz_confusion"])
-    print(f"  {'':<16}{'previsto normal':>18}{'previsto fuga':>16}")
-    for i, nombre in enumerate(("real normal", "real fuga")):
-        print(f"  {nombre:<16}{cm[i][0]:>18,}{cm[i][1]:>16,}")
     tn, fp, fn, tp = cm[0][0], cm[0][1], cm[1][0], cm[1][1]
-    print(f"  TP={tp:,}  FP={fp:,}  FN={fn:,}  TN={tn:,}")
-
-    print("\n  5. LECTURA DE LA META")
-    cumple = g["accuracy"] >= TARGET_ACCURACY
-    print(f"     Exactitud {g['accuracy']:.2%} frente a la meta del {TARGET_ACCURACY:.0%}: "
-          f"{'CUMPLIDA' if cumple else 'NO CUMPLIDA'}")
-    print(f"     Linea base (siempre 'normal'): {base:.2%}")
-    print(f"     Diferencia sobre la base: {(g['accuracy'] - base) * 100:+.2f} puntos")
+    print(f"\n     Matriz: TP={tp:,}  FP={fp:,}  FN={fn:,}  TN={tn:,}")
+    cumple_a = g["accuracy"] >= TARGET_ACCURACY
+    print(f"     Meta del {TARGET_ACCURACY:.0%}: "
+          f"{'CUMPLIDA' if cumple_a else 'NO CUMPLIDA'} ({g['accuracy']:.2%}). "
+          f"Linea base {base:.2%}, diferencia {(g['accuracy'] - base) * 100:+.2f} puntos.")
     if g["accuracy"] < base:
-        print("     OJO: la meta de exactitud es INFERIOR a la linea base trivial.")
-        print("          Detectar fugas obliga a emitir alertas y toda alerta falsa")
-        print("          resta exactitud. Alcanzar el 80 % aqui exige no detectar casi")
-        print("          nada. La cifra util es el F1 de la clase fuga.")
+        print("     OJO: en este escenario la meta es INFERIOR a la linea base trivial.")
+        print("          Cumplirla exige no detectar casi nada. La cifra util es el F1.")
 
-    print("\n  6. UMBRAL ADAPTATIVO POR RED (historico limpio propio)")
+    print(f"\n  B) RED CONOCIDA - umbral propio por red (historico limpio de "
+          f"{a.dias_calibracion} dias)")
     pasos = a.dias_calibracion * 48
-    print(f"     Cada red fija su umbral con un percentil de las puntuaciones de sus")
-    print(f"     primeros {a.dias_calibracion} dias ({pasos} pasos).")
-    print("     No se usa ninguna etiqueta: el periodo se define por tiempo.\n")
+    print(f"     Cada red toma el percentil indicado de las puntuaciones de sus")
+    print(f"     primeros {pasos} pasos. Sin etiquetas: el periodo se define por tiempo.\n")
     print(f"  {'percentil':>10}{'exactitud':>11}{'precision':>11}{'recall':>10}{'F1':>9}{'F-beta':>9}")
     print("  " + "-" * 60)
     cp = curva_percentiles(ds, prob_oof, pasos, a.beta)
@@ -374,12 +380,12 @@ def main(argv: list[str] | None = None) -> int:
             cp.sort(key=lambda c: c["percentil"])
         modo = "fijado a mano"
     else:
-        # Misma regla que el umbral fijo: se elige el punto de operacion que
+        # Misma regla que el umbral global: el punto de operacion que
         # maximiza F-beta sobre las predicciones fuera de muestra.
         pct_elegido = max(cp, key=lambda c: c["fbeta"])["percentil"]
         modo = "elegido por F-beta"
     for c in cp:
-        marca = "  <--" if c["percentil"] == pct_elegido else ""
+        marca = "  <-- punto B" if c["percentil"] == pct_elegido else ""
         print(f"  {c['percentil']:>10g}{c['accuracy']:>11.4f}{c['precision']:>11.4f}"
               f"{c['recall']:>10.4f}{c['f1']:>9.4f}{c['fbeta']:>9.4f}{marca}")
 
@@ -387,30 +393,39 @@ def main(argv: list[str] | None = None) -> int:
     ag = adapt["global"]
     print(f"\n     percentil {pct_elegido:g} ({modo}): exactitud={ag['accuracy']:.4f} "
           f"precision={ag['precision']:.4f} recall={ag['recall']:.4f} F1={ag['f1']:.4f}")
-    print(f"     OJO: un percentil alto significa que en operacion normal ya salta")
-    print(f"     una alerta de cada {100 - pct_elegido:g}. Que eso sea aceptable lo")
-    print(f"     decide el operador, no la metrica.")
-    print(f"\n  {'Escenario':<12}{'umbral':>9}{'exactitud':>11}{'precision':>11}{'recall':>9}{'F1':>8}")
+    print(f"     Un percentil alto significa que en operacion normal salta una alerta")
+    print(f"     de cada {1 / (1 - pct_elegido / 100):.0f} pasos. Que eso sea aceptable")
+    print(f"     lo decide el operador, no la metrica.")
+    print(f"\n     Por red:")
+    print(f"  {'Escenario':<12}{'umbral':>9}{'exactitud':>11}{'precision':>11}{'recall':>9}{'F1':>8}")
     print("  " + "-" * 60)
     for esc, e in adapt["por_escenario"].items():
         control = " (control)" if e["n_reales_fuga"] == 0 else ""
         print(f"  {esc:<12}{e['umbral']:>9.4f}{e['accuracy']:>11.4f}{e['precision']:>11.4f}"
               f"{e['recall']:>9.4f}{e['f1']:>8.4f}{control}")
-    print(f"\n  Los umbrales por red abarcan de "
+    cm_b = np.array(ag["matriz_confusion"])
+    print(f"\n     Matriz: TP={cm_b[1][1]:,}  FP={cm_b[0][1]:,}  "
+          f"FN={cm_b[1][0]:,}  TN={cm_b[0][0]:,}")
+    cumple_b = ag["accuracy"] >= TARGET_ACCURACY
+    print(f"     Meta del {TARGET_ACCURACY:.0%}: "
+          f"{'CUMPLIDA' if cumple_b else 'NO CUMPLIDA'} ({ag['accuracy']:.2%}). "
+          f"Linea base {base:.2%}, diferencia {(ag['accuracy'] - base) * 100:+.2f} puntos.")
+
+    print(f"\n  DIFERENCIA ENTRE LOS DOS ESCENARIOS DE DESPLIEGUE")
+    print(f"  {'escenario':<34}{'exactitud':>11}{'precision':>11}{'recall':>10}{'F1':>9}")
+    print("  " + "-" * 75)
+    print(f"  {'A) red nueva (umbral global)':<34}{g['accuracy']:>11.4f}"
+          f"{g['precision']:>11.4f}{g['recall']:>10.4f}{g['f1']:>9.4f}")
+    print(f"  {'B) red conocida (umbral propio)':<34}{ag['accuracy']:>11.4f}"
+          f"{ag['precision']:>11.4f}{ag['recall']:>10.4f}{ag['f1']:>9.4f}")
+    print(f"  {'diferencia':<34}{ag['accuracy'] - g['accuracy']:>+11.4f}"
+          f"{ag['precision'] - g['precision']:>+11.4f}{ag['recall'] - g['recall']:>+10.4f}"
+          f"{ag['f1'] - g['f1']:>+9.4f}")
+    print(f"\n  Conocer la red vale {100 * (ag['f1'] - g['f1']) / g['f1']:+.1f} % de F1.")
+    print(f"  Los umbrales por red abarcan de "
           f"{min(e['umbral'] for e in adapt['por_escenario'].values()):.3f} a "
           f"{max(e['umbral'] for e in adapt['por_escenario'].values()):.3f}: "
-          "ese rango es justo lo que un umbral fijo no puede cubrir.")
-
-    print(f"\n  COMPARACION")
-    print(f"    {'metodo':<34}{'exactitud':>11}{'precision':>11}{'recall':>10}{'F1':>9}")
-    print("    " + "-" * 75)
-    print(f"    {'umbral fijo ' + str(th) + ' (todos)':<34}{g['accuracy']:>11.4f}"
-          f"{g['precision']:>11.4f}{g['recall']:>10.4f}{g['f1']:>9.4f}")
-    print(f"    {'umbral adaptativo (por red)':<34}{ag['accuracy']:>11.4f}"
-          f"{ag['precision']:>11.4f}{ag['recall']:>10.4f}{ag['f1']:>9.4f}")
-    mejora = ag["f1"] - g["f1"]
-    print(f"\n    Ganancia en F1 del umbral adaptativo: {mejora:+.4f} "
-          f"({100 * mejora / g['f1']:+.1f} %)")
+          "un valor global no cubre ese rango.")
 
     print("\n  Entrenando el modelo final con los 10 escenarios...")
     final = build_model(a.n_estimators, a.balance, a.seed)
@@ -450,21 +465,54 @@ def main(argv: list[str] | None = None) -> int:
                   "excluidas": ds.excluded},
         "validacion": {
             "esquema": "Leave-One-Scenario-Out en una sola pasada",
-            "curva_compromiso": curva,
-            "punto_operacion": ev,
-            "umbral": th,
+            "escenarios_despliegue": {
+                "A_red_nueva": {
+                    "descripcion": ("El operador no tiene datos de esta red. Entrena con "
+                                    "otras redes y NO puede calibrar: sin historico no "
+                                    "hay forma de saber a partir de que puntuacion es "
+                                    "anomala. Usa un umbral global."),
+                    "metodo_umbral": "global",
+                    "umbral": th,
+                    "metricas": g,
+                    "media_por_escenario": m,
+                    "media_solo_con_fuga": mc,
+                    "por_escenario": ev["por_escenario"],
+                    "matriz_confusion": cm.tolist(),
+                    "meta_cumplida": bool(cumple_a),
+                },
+                "B_red_conocida": {
+                    "descripcion": ("El operador ya tiene historico de esta red. Vigila "
+                                    f"{a.dias_calibracion} dias declarados sin fugas y con "
+                                    "esos fija su propio umbral. Es el caso real de una "
+                                    "empresa de agua."),
+                    "metodo_umbral": "percentil_del_historico_propio",
+                    "percentil": pct_elegido,
+                    "percentil_modo": modo,
+                    "dias_calibracion": a.dias_calibracion,
+                    "pasos_calibracion": pasos,
+                    "metricas": ag,
+                    "por_escenario": adapt["por_escenario"],
+                    "matriz_confusion": cm_b.tolist(),
+                    "meta_cumplida": bool(cumple_b),
+                },
+            },
+            "curva_umbral_global": curva,
+            "curva_percentiles": cp,
             "nota_optimismo": (
-                "El umbral se elige sobre las mismas predicciones fuera de muestra que "
-                "se reportan. Es un unico escalar derivado de 175,200 filas, por lo que "
-                "el optimismo es esperablemente despreciable, pero se declara."),
+                "El umbral global y el percentil se eligen sobre las mismas "
+                "predicciones fuera de muestra que se reportan. Son escalares unicos "
+                "derivados de 175,200 filas, por lo que el optimismo es esperablemente "
+                "despreciable, pero se declara."),
         },
         "matriz_confusion_global": cm.tolist(),
         "umbral_adaptativo": adapt,
         "curva_percentiles": cp,
         "linea_base_siempre_normal": round(base, 6),
         "meta_exactitud": TARGET_ACCURACY,
-        "meta_cumplida": bool(cumple),
+        "meta_cumplida": bool(cumple_b),
+        "meta_cumplida_red_nueva": bool(cumple_a),
         "umbral_elegido": th,
+        "percentil_elegido": pct_elegido,
     }
     a.report_out.parent.mkdir(parents=True, exist_ok=True)
     a.report_out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
