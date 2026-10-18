@@ -1,0 +1,40 @@
+# AquaSense-Agent - archivos que NO deben subirse al repositorio
+
+# ---------------------------------------------------------------------------
+# Dataset LeakDB / Hanoi_CMH
+# El dataset ocupa ~505 MB y se distribution con licencia propia de LeakDB.
+# NO se versiona: se descarga aparte y se coloca en data/.
+# ---------------------------------------------------------------------------
+data/
+
+# Artefactos de modelos (se regeneran con train.py)
+models/
+*.joblib
+*.pkl
+
+# Salidas de ejecucion: logs de agente, metricas e informes de inspeccion.
+# Se regeneran ejecutando el proyecto.
+logs/*.csv
+logs/*.jsonl
+logs/*.json
+
+# Informes de inspeccion de datos
+logs/data_inspection.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Entornos de IDE / sistema operativo / editores
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Datos locales sensibles del usuario
+*.local
+.env

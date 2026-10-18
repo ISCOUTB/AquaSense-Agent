@@ -1,4 +1,16 @@
-pandas
-numpy
-scikit-learn
-joblib
+# AquaSense-Agent - dependencias
+# Versiones fijadas a las usadas en la ejecucion real, para reproducibilidad.
+# Instalar con:  python -m pip install -r requirements.txt
+
+pandas==3.0.6
+numpy==2.4.6
+scikit-learn==1.9.1
+joblib==1.6.0
+
+# Transitivas de scikit-learn (no es necesario instalarlas aparte,
+# pero se listan para documentar el entorno verificado):
+#   scipy==1.17.1
+
+# inspect_data.py NO necesita ninguna de estas: usa solo la libreria
+# estandar, a proposito, para poder diagnosticar el entorno antes de
+# instalar nada.
