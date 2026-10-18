@@ -75,6 +75,9 @@ class LeakDetectionAgent:
                 "Entrenalo primero:  python train.py")
         self.bundle = joblib.load(model_path)
         self.modelo = self.bundle["model"]
+        # Forzar n_jobs=1 para evitar hang de joblib en Windows al predecir
+        if hasattr(self.modelo, "n_jobs"):
+            self.modelo.n_jobs = 1
         self.variables = self.bundle["feature_names"]
         # Variables temporales: el agente necesita historial para calcularlas.
         self.temporal = self.bundle.get("temporal", [])
