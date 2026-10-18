@@ -1,6 +1,7 @@
 #!/bin/bash
 # Descarga LeakDB Hanoi_CMH desde GitHub KIOS-Research
 # Se ejecuta en la etapa BUILD del Dockerfile
+# El data_loader espera la estructura original: Scenario-N/Pressures/, Flows/, Demands/, Labels.csv
 
 set -euo pipefail
 
@@ -18,10 +19,10 @@ echo "Destino: $DATA_DIR"
 echo ""
 
 # Verificar si ya existe (cache de Docker layer)
-# Buscar archivos clave en cualquier subdirectorio
-if find "$DATA_DIR" -name "Nodes.csv" -o -name "Pipes.csv" -o -name "Labels.csv" 2>/dev/null | grep -q .; then
+# Buscar estructura de escenarios
+if find "$DATA_DIR" -maxdepth 2 -name "Scenario-*" -type d 2>/dev/null | grep -q .; then
     echo "✅ Dataset ya existe (cache de Docker), saltando descarga"
-    find "$DATA_DIR" -name "*.csv" | head -10
+    find "$DATA_DIR" -maxdepth 2 -name "Scenario-*" -type d | head -5
     exit 0
 fi
 
@@ -40,43 +41,46 @@ if [ ! -f /tmp/Hanoi_CMH.zip ]; then
 fi
 
 echo ""
-echo "📦 Extrayendo..."
-# Extraer a directorio temporal primero
-TMP_EXTRACT="/tmp/leakdb_extract"
-rm -rf "$TMP_EXTRACT"
-mkdir -p "$TMP_EXTRACT"
-unzip -q -o /tmp/Hanoi_CMH.zip -d "$TMP_EXTRACT"
+echo "📦 Extrayendo preservando estructura de directorios..."
+# Extraer directamente a DATA_DIR (el ZIP contiene Hanoi_CMH/Scenario-*/)
+unzip -q -o /tmp/Hanoi_CMH.zip -d "$DATA_DIR"
 
-echo "🔍 Buscando archivos CSV en la extracción..."
-# El ZIP puede tener estructura Hanoi_CMH/Scenario-1/, etc.
-# Buscar y copiar todos los CSV al DATA_DIR plano
-find "$TMP_EXTRACT" -name "*.csv" -exec cp {} "$DATA_DIR"/ \;
+# El ZIP extrae como Hanoi_CMH/Scenario-*/ - mover contenido a raíz de DATA_DIR
+if [ -d "$DATA_DIR/Hanoi_CMH" ]; then
+    echo "📂 Moviendo Hanoi_CMH/* a $DATA_DIR/"
+    mv "$DATA_DIR/Hanoi_CMH"/* "$DATA_DIR"/
+    rmdir "$DATA_DIR/Hanoi_CMH"
+fi
 
-# Verificar archivos clave
-REQUIRED_FILES=("Nodes.csv" "Pipes.csv" "Labels.csv")
+# Verificar estructura esperada por data_loader
+REQUIRED_DIRS=("Scenario-1/Pressures" "Scenario-1/Flows" "Scenario-1/Demands")
 MISSING=0
-for f in "${REQUIRED_FILES[@]}"; do
-    if [ ! -f "$DATA_DIR/$f" ]; then
-        echo "❌ Falta archivo requerido: $f"
+for d in "${REQUIRED_DIRS[@]}"; do
+    if [ ! -d "$DATA_DIR/$d" ]; then
+        echo "❌ Falta directorio requerido: $d"
         MISSING=1
     fi
 done
 
+if [ ! -f "$DATA_DIR/Scenario-1/Labels.csv" ]; then
+    echo "❌ Falta archivo requerido: Scenario-1/Labels.csv"
+    MISSING=1
+fi
+
 if [ $MISSING -eq 1 ]; then
-    echo "❌ No se encontraron todos los archivos requeridos."
-    echo "   Contenido de $DATA_DIR:"
-    ls -la "$DATA_DIR"/*.csv 2>/dev/null | head -20
-    echo "   Contenido de extracción temporal:"
-    find "$TMP_EXTRACT" -name "*.csv" | head -20
+    echo "❌ Estructura incompleta. Contenido de $DATA_DIR:"
+    find "$DATA_DIR" -maxdepth 2 -type d | head -20
     exit 1
 fi
 
 echo ""
-echo "✅ Dataset LeakDB Hanoi_CMH listo (archivos CSV en raíz):"
-ls -la "$DATA_DIR"/*.csv
+echo "✅ Dataset LeakDB Hanoi_CMH listo con estructura original:"
+find "$DATA_DIR" -maxdepth 2 -name "Scenario-*" -type d | head -10
+echo ""
+echo "Archivos en Scenario-1:"
+ls -la "$DATA_DIR/Scenario-1/"
 
-# Limpiar
+# Limpiar ZIP temporal
 rm -f /tmp/Hanoi_CMH.zip
-rm -rf "$TMP_EXTRACT"
 
 echo "=========================================="
