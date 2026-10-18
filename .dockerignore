@@ -1,0 +1,45 @@
+# Docker ignore - excluir archivos que no deben ir en la imagen
+
+# Datos (se descargan en build)
+data/
+demo_data/
+
+# Modelos y logs (se generan en build)
+models/
+logs/
+*.joblib
+*.pkl
+
+# Entornos virtuales y cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentación local (opcional, no necesaria en runtime)
+*.md
+!README.md
+
+# Scripts de desarrollo
+*.sh
+!entrypoint.sh
+!scripts/download_leakdb.sh
+
+# Archivos temporales
+*.tmp
+*.temp
+*~

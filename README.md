@@ -512,6 +512,46 @@ sección 5.
 
 ---
 
+## 7. Despliegue con Docker (Recomendado)
+
+La forma más sencilla de ejecutar el proyecto completo **desde cero**, con el dataset real descargado automáticamente, es usando Docker:
+
+```bash
+# 1. Clonar repositorio
+git clone https://github.com/LuisFelipe634/AquaSense-Agent.git
+cd AquaSense-Agent
+
+# 2. Build + Run (descarga LeakDB ~505 MB, entrena modelo, lanza UI)
+docker compose up --build
+
+# 3. Abrir en navegador: http://localhost:8501
+```
+
+**Lo que hace automáticamente:**
+- Descarga LeakDB Hanoi_CMH desde GitHub KIOS-Research (~505 MB)
+- Instala dependencias (pandas, numpy, scikit-learn, streamlit, etc.)
+- Entrena modelo RandomForest (LOSO 10 folds, `balance=none`)
+- Lanza Streamlit con 3 modos: Demo live, Métricas oficiales, Batch CSV
+
+**Comandos útiles:**
+
+| Comando | Qué hace |
+|---------|----------|
+| `docker compose up` | Levanta la app (usa cache si no cambió nada) |
+| `docker compose up --build` | Fuerza rebuild completo |
+| `docker compose --profile training up aquasense-train` | Re-entrena modelo |
+| `docker compose --profile evaluation up aquasense-eval` | Evalúa métricas |
+| `docker compose run --rm aquasense bash` | Shell interactivo en contenedor |
+| `docker compose down -v` | Limpia todo (incluye volúmenes) |
+
+**Arquitectura multi-stage:**
+- **Builder**: Python 3.11 + wget/unzip → descarga LeakDB → entrena modelo
+- **Runtime**: Python 3.11 slim (~100 MB) → solo artefactos + Streamlit
+
+**Volúmenes persistentes:** `aquasense_models` y `aquasense_logs` sobreviven a `docker compose down`.
+
+---
+
 ## 8. Reproducibilidad
 
 - Semilla fija (`42`) en `random_state` del modelo y semilla por defecto en

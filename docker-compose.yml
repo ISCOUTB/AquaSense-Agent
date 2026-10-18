@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  aquasense:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Build args opcionales
+      # args:
+      #   - PYTHON_VERSION=3.11
+    container_name: aquasense-agent
+    ports:
+      - "8501:8501"      # Streamlit UI
+    volumes:
+      # Opcional: persistir logs y modelos entre reinicios
+      - aquasense_models:/app/models
+      - aquasense_logs:/app/logs
+      # Opcional: montar código local para desarrollo (hot reload)
+      # - ./:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Variables opcionales para configuración
+      # - AQUASENSE_DEMO_MODE=0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Servicio opcional: solo entrenamiento (para re-entrenar sin levantar UI)
+  aquasense-train:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aquasense-train
+    command: ["train"]
+    volumes:
+      - aquasense_models:/app/models
+      - aquasense_logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    profiles:
+      - training  # Solo se levanta con: docker compose --profile training up
+
+  # Servicio opcional: solo evaluación
+  aquasense-eval:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["evaluate"]
+    volumes:
+      - aquasense_models:/app/models
+      - aquasense_logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    profiles:
+      - evaluation
+
+volumes:
+  aquasense_models:
+  aquasense_logs:
+
+# Uso:
+#   docker compose up --build           # Build + Streamlit (default)
+#   docker compose up                   # Levantar (usa imagen cached)
+#   docker compose --profile training up --build aquasense-train  # Re-entrenar
+#   docker compose --profile evaluation up aquasense-eval         # Evaluar
+#   docker compose run --rm aquasense bash                       # Shell interactivo
+#   docker compose down -v            # Limpiar todo (incluye volúmenes)
