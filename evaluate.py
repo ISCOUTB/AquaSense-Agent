@@ -110,30 +110,74 @@ def mostrar_validacion(rep: dict, f1_min: float) -> dict:
     print("\n  Los escenarios marcados (control) no tienen fugas: su exactitud no es")
     print("  un acierto del modelo, es la consecuencia de no haber avisado nunca.")
 
-    print("\n  5. VEREDICTO")
-    cumple_acc = g["accuracy"] >= TARGET_ACCURACY
-    print(f"    Exactitud {g['accuracy']:.2%} frente a la meta del {TARGET_ACCURACY:.0%}: "
-          f"{'CUMPLIDA' if cumple_acc else 'NO CUMPLIDA'}")
-    print(f"    Linea base trivial ({base:.2%}). Diferencia: {(g['accuracy'] - base) * 100:+.2f} puntos")
-    print(f"    F1 de la clase fuga: {g['f1']:.4f} "
-          f"({'supera' if g['f1'] >= f1_min else 'NO supera'} el minimo de {f1_min:.2f})")
-    if not cumple_acc and g["accuracy"] < base:
+    print("\n  5. UMBRAL ADAPTATIVO POR RED")
+    if "umbral_adaptativo" in rep:
+        ad = rep["umbral_adaptativo"]
+        g2 = ad["global"]
+        print(f"     Metodo: {ad['metodo']}. Sin etiquetas: el periodo se define por tiempo.")
+        print(f"\n  {'Escenario':<12}{'umbral':>9}{'exactitud':>11}{'precision':>11}"
+              f"{'recall':>9}{'F1':>8}")
+        print("  " + "-" * 60)
+        for esc, e in ad["por_escenario"].items():
+            control = " (control)" if e["n_reales_fuga"] == 0 else ""
+            print(f"  {esc:<12}{e['umbral']:>9.4f}{e['accuracy']:>11.4f}{e['precision']:>11.4f}"
+                  f"{e['recall']:>9.4f}{e['f1']:>8.4f}{control}")
+        print(f"\n  Los umbrales por red abarcan de "
+              f"{min(e['umbral'] for e in ad['por_escenario'].values()):.3f} a "
+              f"{max(e['umbral'] for e in ad['por_escenario'].values()):.3f}. "
+              "Un unico valor fijo no cubre ese rango.")
+        print(f"\n  {'metodo':<32}{'exactitud':>11}{'precision':>11}{'recall':>10}{'F1':>9}")
+        print("  " + "-" * 73)
+        print(f"  {'umbral fijo ' + str(th) + ' (todas)':<32}{g['accuracy']:>11.4f}"
+              f"{g['precision']:>11.4f}{g['recall']:>10.4f}{g['f1']:>9.4f}")
+        print(f"  {'umbral adaptativo (por red)':<32}{g2['accuracy']:>11.4f}"
+              f"{g2['precision']:>11.4f}{g2['recall']:>10.4f}{g2['f1']:>9.4f}")
+        print(f"  {'ganancia en F1':<32}{g2['f1'] - g['f1']:>+11.4f}"
+              f"{g2['precision'] - g['precision']:>+11.4f}"
+              f"{g2['recall'] - g['recall']:>+10.4f}"
+              f"{100 * (g2['f1'] - g['f1']) / g['f1']:>+8.1f}%")
+    else:
+        print("     (no evaluado: ejecuta train.py con la version actual)")
+
+    print("\n  6. VEREDICTO")
+    metodo = "adaptativo por red" if ad else "umbral fijo"
+    principal = ad["global"] if ad else g
+    cumple_acc = principal["accuracy"] >= TARGET_ACCURACY
+    print(f"    Metodo recomendado: {metodo}")
+    print(f"    Exactitud {principal['accuracy']:.2%} frente a la meta del "
+          f"{TARGET_ACCURACY:.0%}: {'CUMPLIDA' if cumple_acc else 'NO CUMPLIDA'}")
+    print(f"    Linea base trivial ({base:.2%}). "
+          f"Diferencia: {(principal['accuracy'] - base) * 100:+.2f} puntos")
+    print(f"    F1 de la clase fuga: {principal['f1']:.4f} "
+          f"({'supera' if principal['f1'] >= f1_min else 'NO supera'} el minimo de {f1_min:.2f})")
+    print(f"    AUC global: {principal['auc']}")
+    if ad and ad["global"]["accuracy"] < base:
         print("\n    La meta de exactitud del 80 % es INFERIOR a la linea base trivial.")
         print("    No es un objetivo util: se supera sin detectar ninguna fuga. Lo")
         print("    que mide capacidad de deteccion es el F1 de la clase fuga.")
+    elif ad:
+        print("\n    Aqui la exactitud si es informativo: supera la linea base trivial")
+        print("    Y sedetectan fugas, que es lo que hace que no sea trivial.")
 
     print(f"\n  Nota declarada: {val['nota_optimismo']}")
 
+    ad = rep.get("umbral_adaptativo")
+    principal = ad["global"] if ad else g
     return {
         "umbral": th,
+        "metodo_recomendado": "adaptativo_por_red" if ad else "umbral_fijo",
         "agregado": g,
+        "recomendado": principal,
         "media_por_fold": m,
         "solo_con_fuga": mc,
+        "adaptativo": ad["global"] if ad else None,
         "curva_compromiso": val["curva_compromiso"],
         "matriz_confusion": cm.tolist(),
         "base_siempre_normal": base,
-        "meta_exactitud": TARGET_ACCURACY, "meta_cumplida": bool(cumple_acc),
-        "f1_minimo": f1_min, "f1_alcanzado": bool(g["f1"] >= f1_min),
+        "meta_exactitud": TARGET_ACCURACY,
+        "meta_cumplida": bool(principal["accuracy"] >= TARGET_ACCURACY),
+        "f1_minimo": f1_min,
+        "f1_alcanzado": bool(principal["f1"] >= f1_min),
     }
 
 

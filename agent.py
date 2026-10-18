@@ -57,9 +57,18 @@ LOG_FIELDS = [
 
 
 class LeakDetectionAgent:
-    """Agente que clasifica cada observacion como fuga o no."""
+    """Agente que clasifica cada observacion como fuga o no.
 
-    def __init__(self, model_path: Path = MODEL_PATH, log_path: Path = LOG_PATH):
+    Umbral adaptativo: en vez de usar una constante valida para todas las
+    redes, el agente fija el SUYO a partir de un periodo que el operador
+    declara sin fugas. Es necesario porque cada red es una realizacion
+    hidraulica distinta y la escala de las probabilidades no es comparable
+    entre redes: medido en este dataset, el umbral optimo va de 0.010 a
+    0.400 segun el escenario.
+    """
+
+    def __init__(self, model_path: Path = MODEL_PATH, log_path: Path = LOG_PATH,
+                 percentil: float | None = None):
         if not Path(model_path).exists():
             raise SystemExit(
                 f"No existe el modelo {model_path}.\n"
@@ -67,7 +76,12 @@ class LeakDetectionAgent:
         self.bundle = joblib.load(model_path)
         self.modelo = self.bundle["model"]
         self.variables = self.bundle["feature_names"]
+        self.percentil = percentil if percentil is not None else \
+            self.bundle.get("percentil_calibracion", 90.0)
+        # Hasta calibrar, se usa el umbral global como valor provisional.
         self.umbral = self.bundle["umbral"]
+        self.calibrado = False
+        self.calibracion: dict = {}
         self.log_path = Path(log_path)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._log = self.log_path.open("w", newline="", encoding="utf-8")
@@ -76,6 +90,44 @@ class LeakDetectionAgent:
         self._log.flush()
         self.n_alertas = 0
         self.n_observaciones = 0
+
+    # ---------------- PERCEPCION ----------------
+    def _probabilidad(self, observacion: dict) -> float:
+        """Puntua una observacion sin registrarla. Usado por calibrar y decidir."""
+        percepcion = self.perceive(observacion)
+        return self.decide(percepcion)["prob_fuga"]
+
+    # ---------------- CALIBRACION ----------------
+    def calibrar(self, observaciones_limpias) -> dict:
+        """Fija el umbral con un periodo que el operador declara SIN FUGAS.
+
+        Es el equivalente a operar la red un mes y ver que no ocurre nada:
+        se recogen las puntuaciones del modelo y se toma el percentil
+        indicado. A partir de ahi, superar ese percentil significa salirse
+        del comportamiento habitual de ESA red concreta.
+
+        No usa etiquetas en ningun momento: solo recibe mediciones.
+        """
+        puntuaciones = [self._probabilidad(obs) for obs in observaciones_limpias]
+        if not puntuaciones:
+            raise ValueError("La calibracion necesita al menos una observacion.")
+
+        anterior = self.umbral
+        self.umbral = float(np.percentile(puntuaciones, self.percentil))
+        self.calibrado = True
+        self.calibracion = {
+            "periodil": self.percentil,
+            "n_observaciones": len(puntuaciones),
+            "puntuaciones": {
+                "min": round(float(np.min(puntuaciones)), 6),
+                "mediana": round(float(np.median(puntuaciones)), 6),
+                "p90": round(float(np.percentile(puntuaciones, 90)), 6),
+                "max": round(float(np.max(puntuaciones)), 6),
+            },
+            "umbral_global_previo": anterior,
+            "umbral_adaptado": round(self.umbral, 6),
+        }
+        return self.calibracion
 
     # ---------------- PERCEPCION ----------------
     def perceive(self, observacion: dict) -> dict:
@@ -137,19 +189,27 @@ class LeakDetectionAgent:
         self._log.flush()
 
     # ---------------- CICLO ----------------
-    def run(self, observaciones, incluir_etiquetas: dict | None = None) -> dict:
+    def run(self, observaciones, incluir_etiquetas: dict | None = None,
+            n_calibracion: int = 0) -> dict:
         """Recorre las observaciones y ejecuta el ciclo completo en cada una.
 
         observaciones: iterable de dicts {escenario, timestamp, valores}
+        n_calibracion: numero de observaciones iniciales usadas para calibrar.
+            Esas NO se registran como eventos de monitorizacion: son el
+            periodo de referencia declarado sin fugas.
         incluir_etiquetas: {observacion_id: etiqueta} SOLO para evaluacion.
             Se usa despues de decidir; nunca entra en el modelo.
         """
         inicio = datetime.now()
-        for obs in observaciones:
+        for i, obs in enumerate(observaciones):
+            if i == n_calibracion and n_calibracion > 0 and not self.calibrado:
+                # El agente ya vio el periodo limpio; fija su umbral ahora.
+                self.calibrar(observaciones[:n_calibracion])
+
             percepcion = self.perceive(obs)
             decision = self.decide(percepcion)
             accion = self.act(decision)
-            etiqueta = (incluir_etiquetas or {}).get(self.n_observaciones)
+            etiqueta = (incluir_etiquetas or {}).get(i)
             self.log_event(percepcion, decision, accion, etiqueta)
             self.n_observaciones += 1
             if accion == ALERTA:
@@ -157,10 +217,14 @@ class LeakDetectionAgent:
 
         return {
             "observaciones": self.n_observaciones,
+            "observaciones_calibracion": n_calibracion,
             "alertas": self.n_alertas,
             "tasa_alerta": round(self.n_alertas / self.n_observaciones, 6)
             if self.n_observaciones else 0.0,
+            "metodo_umbral": "adaptativo_por_percentil" if self.calibrado else "global_fijo",
+            "percentil": self.percentil,
             "umbral": self.umbral,
+            "calibracion": self.calibracion,
             "n_variables": len(self.variables),
             "log": str(self.log_path.resolve()),
             "inicio": inicio.isoformat(timespec="seconds"),
@@ -202,6 +266,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--data-dir", type=Path, default=Path("data"))
     p.add_argument("--model", type=Path, default=MODEL_PATH)
     p.add_argument("--log", type=Path, default=LOG_PATH)
+    p.add_argument("--dias-calibracion", type=int, default=30,
+                   help="Dias iniciales que se toman como periodo sin fugas (0 = sin calibrar)")
+    p.add_argument("--percentil", type=float, default=None,
+                   help="Percentil del historico limpio; por defecto, el del modelo")
     p.add_argument("--resumen-out", type=Path, default=Path("logs/agent_run.json"))
     a = p.parse_args(argv)
 
@@ -212,20 +280,44 @@ def main(argv: list[str] | None = None) -> int:
     mask = ds.scenario == a.escenario
     y = ds.y_int[mask]
     total = len(y) if a.limite is None else min(a.limite, len(y))
+    n_cal = min(a.dias_calibracion * 48, total)
     etiquetas = {i: int(y[i]) for i in range(total)}
+    observaciones = list(observaciones_de_escenario(ds, a.escenario, a.limite))
 
     print("=" * 78)
     print("AQUASENSE-AGENT  |  Ejecucion del agente")
     print("=" * 78)
-    print(f"\n  Escenario   : {a.escenario}")
-    print(f"  Observaciones a procesar: {total:,}")
-    print(f"  Variables de entrada    : {len(ds.feature_names)}")
-    print(f"  Umbral del modelo       : {joblib.load(a.model)['umbral']}")
-    print(f"  Registro                : {a.log.resolve()}")
+    print(f"\n  Escenario      : {a.escenario}")
+    print(f"  Observaciones  : {total:,}")
+    print(f"  Variables      : {len(ds.feature_names)}")
 
-    with LeakDetectionAgent(a.model, a.log) as agente:
-        resumen = agente.run(observaciones_de_escenario(ds, a.escenario, a.limite),
-                             incluir_etiquetas=etiquetas)
+    if n_cal > 0:
+        contaminados = sum(etiquetas[i] for i in range(n_cal))
+        print(f"  Calibracion    : primeros {a.dias_calibracion} dias ({n_cal:,} pasos)")
+        if contaminados:
+            print(f"  ATENCION: el periodo de calibracion contiene {contaminados:,} pasos")
+            print(f"           marcados como fuga. El operador asumio que estaba limpio")
+            print(f"           y no lo estaba; el umbral saldra demasiado alto.")
+        else:
+            print("  Periodo de calibracion sin fugas: verificado.")
+    else:
+        print("  Calibracion    : desactivada, se usa el umbral global del modelo")
+
+    with LeakDetectionAgent(a.model, a.log, percentil=a.percentil) as agente:
+        resumen = agente.run(observaciones, incluir_etiquetas=etiquetas,
+                             n_calibracion=n_cal)
+        if n_cal > 0 and not agente.calibrado:
+            agente.calibrar(observaciones[:n_cal])
+
+    print(f"\n  Metodo de umbral: {resumen['metodo_umbral']}")
+    if agente.calibracion:
+        c = agente.calibracion
+        print(f"  Percentil {c['periodil']:g} de {c['n_observaciones']:,} observaciones limpias")
+        print(f"    puntuaciones: min={c['puntuaciones']['min']:.4f} "
+              f"mediana={c['puntuaciones']['mediana']:.4f} "
+              f"p90={c['puntuaciones']['p90']:.4f} max={c['puntuaciones']['max']:.4f}")
+        print(f"    umbral global del modelo  : {c['umbral_global_previo']}")
+        print(f"    umbral adaptado a ESTA red: {c['umbral_adaptado']}")
 
     print(f"\n  Observaciones procesadas: {resumen['observaciones']:,}")
     print(f"  Alertas generadas       : {resumen['alertas']:,}")

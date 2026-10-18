@@ -72,6 +72,7 @@ REPORT_PATH = Path("logs/train_report.json")
 TARGET_ACCURACY = 0.80
 THRESHOLD_GRID = [0.5, 0.4, 0.3, 0.25, 0.2, 0.15, 0.12, 0.1, 0.08,
                   0.06, 0.05, 0.04, 0.03, 0.02, 0.01, 0.005]
+PERCENTILES_GRID = [80, 85, 90, 95, 98, 99, 99.5, 99.9]
 
 
 # --------------------------------------------------------------------------
@@ -193,6 +194,72 @@ def curva_compromiso(ds: Dataset, prob: np.ndarray, beta: float) -> list[dict]:
 
 
 # --------------------------------------------------------------------------
+# Umbral adaptativo por red
+# --------------------------------------------------------------------------
+#
+# Problema medido: el umbral optimo va de 0.010 a 0.400 segun la red (factor
+# 40), porque cada escenario es una realizacion hidraulica distinta y desplaza
+# la distribucion de las variables. Un umbral constante cae en el sitio
+# equivocado en cada red.
+#
+# Solucion: cada red fija su umbral con SU PROPIO historico limpio. Se toman
+# las puntuaciones de los primeros pasos del escenario y se elige el
+# percentil indicado. No se usa ninguna etiqueta: el periodo de calibracion
+# se define por posicion en el tiempo, y solo hace falta que este libre de
+# fugas, que es justo lo que el operador puede afirmar de su red.
+
+
+def evaluar_umbral_adaptativo(ds: Dataset, prob: np.ndarray, percentil: float,
+                              pasos_calibracion: int, beta: float = 1.0) -> dict:
+    """Umbral por escenario, derivado del historico limpio de ese escenario."""
+    pred = np.zeros(ds.n_samples, dtype=int)
+    evaluados = np.zeros(ds.n_samples, dtype=bool)
+    por_esc: dict[str, Any] = {}
+
+    for esc in ds.scenarios:
+        idx = np.where(ds.scenario == esc)[0]
+        base = prob[idx[:pasos_calibracion]]
+        th = float(np.percentile(base, percentil))
+        test = idx[pasos_calibracion:]
+        pred[test] = (prob[test] >= th).astype(int)
+        evaluados[test] = True
+        por_esc[esc] = {**metrics(ds.y_int[test], pred[test], prob[test]),
+                        "umbral": round(th, 6),
+                        "pasos_calibracion": int(pasos_calibracion),
+                        "n_calibracion": len(base)}
+
+    glob = metrics(ds.y_int[evaluados], pred[evaluados], prob[evaluados])
+    glob["fbeta"] = round(fbeta(ds.y_int[evaluados], pred[evaluados], beta), 6)
+    con_fuga = {k: v for k, v in por_esc.items() if v["n_reales_fuga"] > 0}
+    return {
+        "metodo": f"percentil {percentil} del historico limpio ({pasos_calibracion} pasos)",
+        "percentil": percentil,
+        "pasos_calibracion": pasos_calibracion,
+        "n_evaluados": int(evaluados.sum()),
+        "global": glob,
+        "media_por_escenario": {
+            c: round(float(np.mean([v[c] for v in por_esc.values()])), 6)
+            for c in ("accuracy", "precision", "recall", "f1")},
+        "media_solo_con_fuga": {
+            c: round(float(np.mean([v[c] for v in con_fuga.values()])), 6)
+            for c in ("accuracy", "precision", "recall", "f1")} if con_fuga else None,
+        "por_escenario": por_esc,
+    }
+
+
+def curva_percentiles(ds: Dataset, prob: np.ndarray, pasos: int, beta: float = 1.0) -> list[dict]:
+    """Como cambia el rendimiento segun el percentil elegido para el umbral."""
+    salida = []
+    for p in PERCENTILES_GRID:
+        r = evaluar_umbral_adaptativo(ds, prob, float(p), pasos, beta)
+        g = r["global"]
+        salida.append({"percentil": p, "f1": g["f1"], "precision": g["precision"],
+                       "recall": g["recall"], "accuracy": g["accuracy"],
+                       "fbeta": g["fbeta"]})
+    return salida
+
+
+# --------------------------------------------------------------------------
 # Programa
 # --------------------------------------------------------------------------
 
@@ -203,7 +270,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--n-estimators", type=int, default=150)
     p.add_argument("--balance", choices=["none", "class_weight"], default="class_weight")
     p.add_argument("--beta", type=float, default=1.0,
-                   help="F-beta para elegir el umbral. beta>1 prioriza recall.")
+                   help="F-beta para elegir el umbral fijo. beta>1 prioriza recall.")
+    p.add_argument("--percentil-calibracion", type=float, default=0.0,
+                   help="Percentil del historico limpio. 0 = elegir automaticamente "
+                        "el que maximiza F-beta, con la misma regla que el umbral fijo.")
+    p.add_argument("--dias-calibracion", type=int, default=30,
+                   help="Dias iniciales sin fugas usados para calibrar cada red")
     p.add_argument("--seed", type=int, default=RANDOM_SEED)
     p.add_argument("--with-demands", action="store_true")
     p.add_argument("--model-out", type=Path, default=MODEL_PATH)
@@ -286,6 +358,60 @@ def main(argv: list[str] | None = None) -> int:
         print("          resta exactitud. Alcanzar el 80 % aqui exige no detectar casi")
         print("          nada. La cifra util es el F1 de la clase fuga.")
 
+    print("\n  6. UMBRAL ADAPTATIVO POR RED (historico limpio propio)")
+    pasos = a.dias_calibracion * 48
+    print(f"     Cada red fija su umbral con un percentil de las puntuaciones de sus")
+    print(f"     primeros {a.dias_calibracion} dias ({pasos} pasos).")
+    print("     No se usa ninguna etiqueta: el periodo se define por tiempo.\n")
+    print(f"  {'percentil':>10}{'exactitud':>11}{'precision':>11}{'recall':>10}{'F1':>9}{'F-beta':>9}")
+    print("  " + "-" * 60)
+    cp = curva_percentiles(ds, prob_oof, pasos, a.beta)
+    if a.percentil_calibracion > 0:
+        pct_elegido = a.percentil_calibracion
+        if pct_elegido not in PERCENTILES_GRID:
+            cp.append({"percentil": pct_elegido,
+                       **evaluar_umbral_adaptativo(ds, prob_oof, pct_elegido, pasos, a.beta)["global"]})
+            cp.sort(key=lambda c: c["percentil"])
+        modo = "fijado a mano"
+    else:
+        # Misma regla que el umbral fijo: se elige el punto de operacion que
+        # maximiza F-beta sobre las predicciones fuera de muestra.
+        pct_elegido = max(cp, key=lambda c: c["fbeta"])["percentil"]
+        modo = "elegido por F-beta"
+    for c in cp:
+        marca = "  <--" if c["percentil"] == pct_elegido else ""
+        print(f"  {c['percentil']:>10g}{c['accuracy']:>11.4f}{c['precision']:>11.4f}"
+              f"{c['recall']:>10.4f}{c['f1']:>9.4f}{c['fbeta']:>9.4f}{marca}")
+
+    adapt = evaluar_umbral_adaptativo(ds, prob_oof, pct_elegido, pasos, a.beta)
+    ag = adapt["global"]
+    print(f"\n     percentil {pct_elegido:g} ({modo}): exactitud={ag['accuracy']:.4f} "
+          f"precision={ag['precision']:.4f} recall={ag['recall']:.4f} F1={ag['f1']:.4f}")
+    print(f"     OJO: un percentil alto significa que en operacion normal ya salta")
+    print(f"     una alerta de cada {100 - pct_elegido:g}. Que eso sea aceptable lo")
+    print(f"     decide el operador, no la metrica.")
+    print(f"\n  {'Escenario':<12}{'umbral':>9}{'exactitud':>11}{'precision':>11}{'recall':>9}{'F1':>8}")
+    print("  " + "-" * 60)
+    for esc, e in adapt["por_escenario"].items():
+        control = " (control)" if e["n_reales_fuga"] == 0 else ""
+        print(f"  {esc:<12}{e['umbral']:>9.4f}{e['accuracy']:>11.4f}{e['precision']:>11.4f}"
+              f"{e['recall']:>9.4f}{e['f1']:>8.4f}{control}")
+    print(f"\n  Los umbrales por red abarcan de "
+          f"{min(e['umbral'] for e in adapt['por_escenario'].values()):.3f} a "
+          f"{max(e['umbral'] for e in adapt['por_escenario'].values()):.3f}: "
+          "ese rango es justo lo que un umbral fijo no puede cubrir.")
+
+    print(f"\n  COMPARACION")
+    print(f"    {'metodo':<34}{'exactitud':>11}{'precision':>11}{'recall':>10}{'F1':>9}")
+    print("    " + "-" * 75)
+    print(f"    {'umbral fijo ' + str(th) + ' (todos)':<34}{g['accuracy']:>11.4f}"
+          f"{g['precision']:>11.4f}{g['recall']:>10.4f}{g['f1']:>9.4f}")
+    print(f"    {'umbral adaptativo (por red)':<34}{ag['accuracy']:>11.4f}"
+          f"{ag['precision']:>11.4f}{ag['recall']:>10.4f}{ag['f1']:>9.4f}")
+    mejora = ag["f1"] - g["f1"]
+    print(f"\n    Ganancia en F1 del umbral adaptativo: {mejora:+.4f} "
+          f"({100 * mejora / g['f1']:+.1f} %)")
+
     print("\n  Entrenando el modelo final con los 10 escenarios...")
     final = build_model(a.n_estimators, a.balance, a.seed)
     final.fit(ds.X, ds.y_int)
@@ -298,7 +424,12 @@ def main(argv: list[str] | None = None) -> int:
     a.model_out.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump({
         "model": final, "feature_names": ds.feature_names, "excluded": ds.excluded,
+        # El agente usa el metodo adaptativo. 'umbral' se conserva como
+        # referencia historica y para comparar sin recalibrar.
         "umbral": th, "beta": a.beta, "seed": a.seed,
+        "metodo_umbral": "adaptativo_por_percentil",
+        "percentil_calibracion": pct_elegido,
+        "dias_calibracion": a.dias_calibracion,
         "n_estimators": a.n_estimators, "balance": a.balance,
         "con_demandas": a.with_demands,
         "entrenado": datetime.now().isoformat(timespec="seconds"),
@@ -308,7 +439,10 @@ def main(argv: list[str] | None = None) -> int:
         "generado": datetime.now().isoformat(timespec="seconds"),
         "configuracion": {"n_estimators": a.n_estimators, "balance": a.balance,
                           "beta": a.beta, "seed": a.seed,
-                          "with_demands": a.with_demands},
+                          "with_demands": a.with_demands,
+                          "percentil_calibracion": pct_elegido,
+                          "percentil_pedido": a.percentil_calibracion,
+                          "dias_calibracion": a.dias_calibracion},
         "entorno": {"python": platform.python_version(), "numpy": np.__version__,
                     "pandas": pd.__version__, "scikit_learn": sklearn.__version__},
         "datos": {"n_filas": ds.n_samples, "n_variables": len(ds.feature_names),
@@ -325,6 +459,8 @@ def main(argv: list[str] | None = None) -> int:
                 "el optimismo es esperablemente despreciable, pero se declara."),
         },
         "matriz_confusion_global": cm.tolist(),
+        "umbral_adaptativo": adapt,
+        "curva_percentiles": cp,
         "linea_base_siempre_normal": round(base, 6),
         "meta_exactitud": TARGET_ACCURACY,
         "meta_cumplida": bool(cumple),

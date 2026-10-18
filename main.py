@@ -18,8 +18,10 @@ Por que este orden
   inspect  confirma el formato real del dataset antes de programar nada.
            Si el dataset cambio, el resto de pasos operarian sobre supuestos.
   train    produce el modelo y el umbral, y valida por Leave-One-Scenario-Out.
+           Compara el metodo de umbral fijo con el adaptativo por red.
   evaluate resume esa validacion en el informe oficial de metricas.
-  agent    ejecuta el ciclo percecion -> decision -> accion -> registro.
+  agent    ejecuta el ciclo percecion -> decision -> accion -> registro,
+           calibrando antes su umbral con el historico limpio de esa red.
 
 El paso de train es el lento (ajusta un umbral por fold). Los demas tardan
 pocos segundos, salvo agent si se procesa un ano entero.

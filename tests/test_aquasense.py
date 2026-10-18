@@ -231,3 +231,74 @@ def test_umbral_dentro_de_rango():
         pytest.skip("falta el modelo (ejecuta train.py)")
     bundle = joblib.load(MODELO)
     assert 0.0 < bundle["umbral"] < 1.0
+
+
+# --------------------------------------------------------------------------
+# 5. Umbral adaptativo por red
+# --------------------------------------------------------------------------
+
+
+@requiere_modelo
+def test_el_modelo_declara_el_metodo_de_umbral():
+    """El agente debe saber si usa umbral fijo o adaptativo, y con que percentil."""
+    import joblib
+
+    bundle = joblib.load(MODELO)
+    assert bundle.get("metodo_umbral") == "adaptativo_por_percentil"
+    assert 0 < bundle.get("percentil_calibracion", 0) <= 100
+    assert bundle.get("dias_calibracion", 0) > 0
+
+
+@requiere_datos
+@requiere_modelo
+def test_la_calibracion_no_usa_etiquetas(tmp_path, ds):
+    """Meter una etiqueta en las observaciones no debe cambiar el umbral.
+
+    Es la garantia de que la calibracion se apoya solo en mediciones: el mismo
+    flujo de observaciones con y sin etiqueta produce el mismo umbral.
+    """
+    import joblib
+
+    from agent import LeakDetectionAgent
+
+    bundle = joblib.load(MODELO)
+    filas = ds.X[ds.scenario == "Scenario-9"].head(200)
+    obs = [{"escenario": "Scenario-9", "timestamp": f"t{i}",
+            "valores": dict(zip(ds.feature_names, filas.iloc[i].to_numpy()))}
+           for i in range(len(filas))]
+
+    with LeakDetectionAgent(MODELO, tmp_path / "a.csv") as ag1:
+        c1 = ag1.calibrar(obs)
+    obs_con_etiqueta = [dict(o, etiqueta_real=1) for o in obs]
+    with LeakDetectionAgent(MODELO, tmp_path / "b.csv") as ag2:
+        c2 = ag2.calibrar(obs_con_etiqueta)
+
+    assert c1["umbral_adaptado"] == c2["umbral_adaptado"], "la etiqueta influyo en el umbral"
+    assert 0.0 <= c1["umbral_adaptado"] <= 1.0
+    assert c1["umbral_adaptado"] != bundle["umbral"], "el umbral deberia adaptarse"
+
+
+@requiere_modelo
+def test_calibrar_sin_observaciones_falla(tmp_path):
+    from agent import LeakDetectionAgent
+
+    with LeakDetectionAgent(MODELO, tmp_path / "c.csv") as ag:
+        with pytest.raises(ValueError):
+            ag.calibrar([])
+
+
+@requiere_datos
+@requiere_modelo
+def test_el_umbral_adaptado_cambia_segun_la_red(tmp_path, ds):
+    """El punto del metodo: redes distintas fijan umbrales distintos."""
+    from agent import LeakDetectionAgent
+
+    distintos = {}
+    for esc in ("Scenario-1", "Scenario-4", "Scenario-9"):
+        filas = ds.X[ds.scenario == esc].head(1440)
+        obs = [{"escenario": esc, "timestamp": f"t{i}",
+                "valores": dict(zip(ds.feature_names, filas.iloc[i].to_numpy()))}
+               for i in range(len(filas))]
+        with LeakDetectionAgent(MODELO, tmp_path / f"{esc}.csv") as ag:
+            distintos[esc] = round(ag.calibrar(obs)["umbral_adaptado"], 4)
+    assert len(set(distintos.values())) > 1, f"todas dieron el mismo umbral: {distintos}"
