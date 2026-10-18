@@ -257,6 +257,31 @@ def test_los_dos_escenarios_de_despliegue_estan_reportados():
         cm = dep[esc]["matriz_confusion"]
         assert sum(sum(fila) for fila in cm) == m["n_muestras"]
 
+    # C es opcional: solo existe si se ejecuto con --historial-propio.
+    if "C_red_conocida_con_historial" in dep:
+        c = dep["C_red_conocida_con_historial"]
+        assert 0.0 <= c["global"]["f1"] <= 1.0
+        assert c["pasos_entrenamiento_propio"] > 0
+        assert c["pasos_entrenamiento_propio"] < c["pasos_calibracion"], (
+            "las mitades de entrenamiento y calibracion deben ser distintas")
+
+
+@requiere_datos
+def test_el_umbral_global_no_es_una_constante_magica():
+    """Sin 'balanced', el umbral optimo deberia ser el natural de 0.5."""
+    import json
+
+    informe = RAIZ / "logs" / "train_report.json"
+    if not informe.exists():
+        pytest.skip("falta logs/train_report.json (ejecuta train.py)")
+    rep = json.loads(informe.read_text(encoding="utf-8"))
+    if rep["configuracion"]["balance"] != "none":
+        pytest.skip("el informe actual no se entreno sin 'class_weight'")
+    a = rep["validacion"]["escenarios_despliegue"]["A_red_nueva"]
+    # El argumento principal para quitar 'balanced' es que no deforma el
+    # modelo; si el AUC fuese <= 0.70 el argumento no se sostiene.
+    assert a["metricas"]["auc"] > 0.70, "AUC demasiado bajo para el argumento"
+
 
 def test_umbral_dentro_de_rango():
     """El umbral del modelo, si existe, debe ser una probabilidad valida."""
@@ -337,3 +362,120 @@ def test_el_umbral_adaptado_cambia_segun_la_red(tmp_path, ds):
         with LeakDetectionAgent(MODELO, tmp_path / f"{esc}.csv") as ag:
             distintos[esc] = round(ag.calibrar(obs)["umbral_adaptado"], 4)
     assert len(set(distintos.values())) > 1, f"todas dieron el mismo umbral: {distintos}"
+
+
+# --------------------------------------------------------------------------
+# 6. Variables temporales
+# --------------------------------------------------------------------------
+#
+# Se prueban sobre datos SINTETICOS y rapidos, porque lo que importa no es el
+# dataset sino las dos garantias: que el rolling no cruce escenarios y que no
+# mire al futuro.
+
+
+def test_el_rolling_no_cruza_escenarios():
+    """El final de una red no debe filtrarse al principio de la siguiente."""
+    import pandas as pd
+
+    from data_loader import agregar_temporales
+
+    X = pd.DataFrame({"a": [1.0, 1.0, 1.0, 100.0, 100.0, 100.0]})
+    esc = np.array(["S1", "S1", "S1", "S2", "S2", "S2"])
+    T = agregar_temporales(X, esc, [("x2", "max", 2)])
+    # S1 vale 1,1,1: su ventana nunca puede ver el 100 que empieza en S2.
+    assert T["a_x2"].tolist() == [1.0, 1.0, 1.0, 100.0, 100.0, 100.0]
+
+
+def test_el_rolling_es_causal():
+    """Cambiar una fila futura no debe alterar las anteriores."""
+    import pandas as pd
+
+    from data_loader import agregar_temporales
+
+    esc = np.array(["S1"] * 6)
+    base = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]})
+    T1 = agregar_temporales(base, esc, [("x3", "max", 3)])
+
+    alterado = base.copy()
+    alterado.loc[5, "a"] = 999.0
+    T2 = agregar_temporales(alterado, esc, [("x3", "max", 3)])
+
+    assert T1["a_x3"].tolist()[:5] == T2["a_x3"].tolist()[:5], "el futuro altero el pasado"
+    # y el valor en t sí incluye el instante actual
+    assert T1["a_x3"].iloc[2] == 3.0
+
+
+def test_el_maximo_no_se_altera_con_la_media():
+    """Un pico aislado debe seguir visible con 'max' y diluirse con 'mean'."""
+    import pandas as pd
+
+    from data_loader import agregar_temporales
+
+    esc = np.array(["S1"] * 5)
+    X = pd.DataFrame({"a": [10.0, 10.0, 50.0, 10.0, 10.0]})
+    T = agregar_temporales(X, esc, [("x3", "max", 3), ("m3", "mean", 3)])
+    assert T["a_x3"].iloc[2] == 50.0
+    assert T["a_m3"].iloc[2] == pytest.approx((10 + 10 + 50) / 3)
+
+
+@requiere_datos
+def test_el_agente_reproduce_las_temporales_del_cargador(tmp_path):
+    """El búfer del agente debe dar EXACTAMENTE lo que calculó data_loader.
+
+    Si divergieran, el agente puntuaría distinto en produccion que en
+    evaluación, y todo el resultado quedaría invalidado.
+    """
+    import joblib
+
+    from agent import LeakDetectionAgent
+
+    modelo_temporal = RAIZ / "models" / "leak_temporal.joblib"
+    if not modelo_temporal.exists():
+        pytest.skip("falta models/leak_temporal.joblib "
+                    "(python train.py --temporal max6-24-48)")
+
+    from data_loader import load_dataset
+
+    ds = load_dataset(DATA, temporal="max6-24-48")
+    bundle = joblib.load(modelo_temporal)
+    assert bundle["temporal"], "el modelo guardado no declara variables temporales"
+
+    filas = ds.X[ds.scenario == "Scenario-9"].head(200)
+    obs = [{"escenario": "Scenario-9", "timestamp": f"t{i}",
+            "valores": dict(zip(ds.base_names, filas.iloc[i][ds.base_names].to_numpy()))}
+           for i in range(len(filas))]
+
+    with LeakDetectionAgent(modelo_temporal, tmp_path / "t.csv") as ag:
+        peor = 0.0
+        for i, o in enumerate(obs):
+            propio = ag.perceive(o)["vector"].iloc[0]
+            for v in ds.feature_names:
+                peor = max(peor, abs(float(propio[v]) - float(filas.iloc[i][v])))
+    assert peor < 1e-9, f"el agente y el dataset discrepan en {peor:.3e}"
+
+
+@requiere_datos
+def test_el_calentamiento_dura_lo_que_la_ventana(tmp_path):
+    """Mientras el historial no esté lleno, el agente no debe alertar."""
+    from agent import LeakDetectionAgent
+
+    modelo_temporal = RAIZ / "models" / "leak_temporal.joblib"
+    if not modelo_temporal.exists():
+        pytest.skip("falta models/leak_temporal.joblib")
+    import joblib
+
+    from data_loader import load_dataset
+
+    ds = load_dataset(DATA, temporal="max6-24-48")
+    ventana = max(w for _, _, w in joblib.load(modelo_temporal)["temporal"])
+    filas = ds.X[ds.scenario == "Scenario-9"].head(ventana + 5)
+    obs = [{"escenario": "Scenario-9", "timestamp": f"t{i}",
+            "valores": dict(zip(ds.base_names, filas.iloc[i][ds.base_names].to_numpy()))}
+           for i in range(len(filas))]
+
+    with LeakDetectionAgent(modelo_temporal, tmp_path / "w.csv") as ag:
+        estados = [ag.perceive(o)["caliente"] for o in obs]
+    # Tras la observacion 'ventana' el buffer ya tiene 'ventana' elementos.
+    assert estados[0] is False
+    assert estados[ventana - 1] is True, "el buffer deberia estar lleno"
+    assert sum(1 for e in estados if not e) == ventana - 1

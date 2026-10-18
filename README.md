@@ -127,6 +127,7 @@ Opciones útiles:
 ```powershell
 python train.py --n-estimators 300 --beta 2   # prioriza no perder fugas
 python train.py --percentil-calibracion 99    # fuerza el percentil del umbral adaptativo
+python train.py --temporal max6-24-48         # ablasion con variables temporales
 python train.py --balance none
 python agent.py --escenario Scenario-7
 python agent.py --escenario Scenario-1 --dias-calibracion 0   # sin calibrar
@@ -146,81 +147,125 @@ entrenamiento de ese mismo fold.
 No son dos formas de medir lo mismo. Son **dos preguntas distintas**, y por eso
 se reportan por separado.
 
-| | A) Red nueva | B) Red conocida |
-|---|---|---|
-| Situación | El operador recibe una red de la que no tiene datos | El operador ya tiene histórico de esa red |
-| ¿Puede calibrar? | **No** | **Sí** |
-| Umbral | Global 0,25 | Percentil 99,5 del propio histórico |
-| Exactitud | 0,7569 | **0,8906** |
-| Precisión | 0,3252 | **0,8385** |
-| Recall | **0,5323** | 0,4344 |
-| **F1 (fuga)** | 0,4038 | **0,5723** |
-| Meta del 80 % | No cumplida | **Cumplida** |
-| Frente a la base trivial (84,54 %) | −8,85 puntos | **+4,52 puntos** |
+| | A) Red nueva | B) Red conocida | C) Red conocida + entrena con su histórico |
+|---|---|---|---|
+| Situación | El operador recibe una red de la que no tiene datos | El operador ya tiene histórico de esa red | Igual que B, y además lo usa para entrenar |
+| Umbral | Global 0,5 | Percentil 99,9 del propio histórico | Ídem, con 720 pasos de calibración |
+| Exactitud | **0,8954** | **0,9056** | 0,8902 |
+| Precisión | 0,9832 | 0,9666 | 0,7743 |
+| Recall | 0,3293 | **0,4555** | **0,4918** |
+| **F1 (fuga)** | 0,4933 | **0,6192** | 0,6016 |
+| Meta del 80 % | Cumplida | Cumplida | Cumplida |
+| Sobre la base (84,54 %) | +5,00 pts | **+6,02 pts** | +4,48 pts |
 
-**Conocer la red aporta +41,7 % de F1.**
+**Conocer la red aporta +25,5 % de F1** (de 0,4933 a 0,6192).
 
-El caso B es el real: una empresa de agua siempre conoce su red. El caso A
-representa desplegar en una red sin ningún dato, donde **no hay forma de
-calibrar** porque no existe referencia de qué es normal en esa red. Por eso usa
-un umbral global, y por eso rinde peor.
+El caso B es el recomendado: una empresa de agua conoce su red y la vigila.
+El caso A representa desplegar en una red sin ningún dato, donde **no hay forma
+de calibrar** porque no existe referencia de qué es normal, así que usa un
+umbral global.
+
+### 5.1.1 `class_weight`: quitarlo mejoró el modelo
+
+Decisión tomada midiendo, no por intuición. `class_weight="balanced"` estaba
+en el código por la costumbre de "compensar el desbalance". **Medido en este
+dataset es contraproducente:**
+
+| | `balanced` | `none` (actual) | Cambio |
+|---|---|---|---|
+| AUC global (A) | 0,7031 | **0,7638** | **+0,06** |
+| F1 (A) | 0,4038 | **0,4933** | **+22 %** |
+| F1 (B) | 0,5723 | **0,6192** | **+8,2 %** |
+| Falsas alarmas (A) | 29 918 | **152** | **−99,5 %** |
+
+Lo importante es que **el AUC también mejoró** (0,7031 → 0,7638). Eso significa
+que `balanced` no solo desplazaba la calibración: hacía que el bosque aprendiera
+un criterio **peor**. Con 15,46 % de positivos, ponderar la clase 1 unas 5,5
+veces hace que el modelo priorice Prefijo de la clase minoritaria con un criterio
+que luego no generaliza.
+
+Ahora `--balance none` es el valor por defecto. Con `balanced` se puede
+reproducir con `--balance class_weight`.
+
+### 5.1.2 Escenario C: también un resultado negativo
+
+Entrenar además con el histórico limpio de la propia red **empeora** el
+resultado: F1 0,6192 → 0,6016, con la precisión cayendo de 0,97 a 0,77.
+
+La explicación es directa: el histórico limpio solo contiene ejemplos
+**negativos**. Añadirlos desplaza el criterio hacia "normal" sin aportar
+información sobre cómo es una fuga *en esa red*. Para que ayudara haría falta
+histórico propio de fugas anteriores, que este dataset no tiene.
+
+Se separa el tramo en dos mitades (720 para entrenar, 720 para calibrar) para
+que el umbral no se contamine con filas que el modelo ya vio. Queda
+disponible con `--historial-propio`.
 
 ### 5.2 Detalle del escenario A (red nueva)
 
-Matriz de confusión: TP 14 420 · FP 29 918 · FN 12 671 · TN 118 191.
+Matriz de confusión: TP 8 920 · FP 152 · FN 18 171 · TN 147 957.
 
 | Escenario | Exactitud | Precisión | Recall | F1 | AUC | Alertas |
 |---|---|---|---|---|---|---|
-| Scenario-10 | 0,9826 | 1,0000 | 0,9604 | 0,9798 | 0,9999 | 7 399 |
-| Scenario-5 | 0,7249 | 1,0000 | 0,1872 | 0,3153 | 0,7136 | 1 110 |
-| Scenario-3 | 0,4901 | 0,3633 | 0,4898 | 0,4172 | 0,4808 | 8 800 |
-| Scenario-6 | 0,9072 | 1,0000 | 0,0310 | 0,0602 | 0,6117 | 52 |
-| Scenario-7 | 0,7408 | 0,0650 | 1,0000 | 0,1221 | 0,9999 | 4 858 |
-| Scenario-8 | 0,6780 | 0,4348 | 0,4752 | 0,4541 | 0,6618 | 5 396 |
-| Scenario-1 *(control)* | 0,0901 | — | — | — | — | 15 942 |
-| Scenario-2 *(control)* | 0,9617 | — | — | — | — | 671 |
-| Scenario-4 *(control)* | 0,9937 | — | — | — | — | 110 |
+| Scenario-7 | 0,9997 | 0,9844 | 1,0000 | 0,9922 | 1,0000 | 321 |
+| Scenario-10 | 0,9533 | 1,0000 | 0,8937 | 0,9439 | 1,0000 | 6 885 |
+| Scenario-8 | 0,7699 | 0,9729 | 0,1888 | 0,3162 | 0,6562 | 958 |
+| Scenario-5 | 0,7060 | 1,0000 | 0,1315 | 0,2325 | 0,7233 | 780 |
+| Scenario-3 | 0,6267 | 0,2593 | 0,0011 | 0,0021 | 0,4858 | 27 |
+| Scenario-6 | 0,9043 | 0,0000 | 0,0000 | 0,0000 | 0,6648 | 0 |
+| Scenario-1 *(control)* | 0,9945 | — | — | — | — | 97 |
+| Scenario-2 *(control)* | 0,9999 | — | — | — | — | 1 |
+| Scenario-4 *(control)* | 0,9998 | — | — | — | — | 3 |
 | Scenario-9 *(control)* | 1,0000 | — | — | — | — | 0 |
 
-En los escenarios de control la exactitud mide **cuántas falsas alarms** emite,
-no aciertos: Scenario-1 produce 15 942.
+En los escenarios de control la exactitud mide **cuántas falsas alarmas**
+emite. Con `class_weight="balanced"` eran 15 942 en Scenario-1; ahora son 97.
 
 ### 5.3 Detalle del escenario B (red conocida)
 
-Cada red fija su umbral con el percentil 99,5 de las puntuaciones de sus
-primeros 30 días. Matriz de confusión: TP 11 768 · FP 2 266 · FN 15 323 ·
-TN 131 443.
+Cada red fija su umbral con el percentil 99,9 de las puntuaciones de sus
+primeros 30 días. Matriz de confusión: TP 12 340 · FP 427 · FN 14 751 ·
+TN 133 282.
 
-| Escenario | Umbral | Exactitud | Precisión | Recall | F1 | AUC |
-|---|---|---|---|---|---|---|
-| Scenario-10 | 0,144 | 0,9917 | 0,9839 | 0,9991 | 0,9914 | 0,9999 |
-| Scenario-7 | 0,365 | 0,9975 | 0,8876 | 1,0000 | 0,9405 | 0,9999 |
-| Scenario-5 | 0,147 | 0,7930 | 0,9738 | 0,4508 | 0,6163 | 0,7136 |
-| Scenario-6 | 0,040 | 0,8943 | 0,4823 | 0,1789 | 0,2610 | 0,6117 |
-| Scenario-8 | 0,347 | 0,7307 | 0,8816 | 0,1418 | 0,2443 | 0,6618 |
-| Scenario-3 | 0,413 | 0,5817 | 0,2253 | 0,0126 | 0,0238 | 0,4808 |
-| Scenario-1 *(control)* | 0,472 | 0,9960 | — | — | — | — |
-| Scenario-2 *(control)* | 0,299 | 0,9843 | — | — | — | — |
-| Scenario-4 *(control)* | 0,233 | 0,9846 | — | — | — | — |
-| Scenario-9 *(control)* | 0,080 | 0,9524 | — | — | — | — |
+| Escenario | Umbral | Exactitud | Precisión | Recall | F1 |
+|---|---|---|---|---|---|
+| Scenario-10 | 0,292 | 0,9982 | 0,9973 | 0,9990 | 0,9981 |
+| Scenario-7 | 0,464 | 0,9995 | 0,9753 | 1,0000 | 0,9875 |
+| Scenario-5 | 0,180 | 0,8073 | 0,9937 | 0,4804 | 0,6477 |
+| Scenario-6 | 0,040 | 0,9137 | 0,7947 | 0,2332 | 0,3605 |
+| Scenario-8 | 0,453 | 0,7561 | 0,9409 | 0,2194 | 0,3558 |
+| Scenario-3 | 0,504 | 0,5937 | 0,2941 | 0,0008 | 0,0015 |
+| Scenario-1 *(control)* | 0,557 | 0,9995 | — | — | — |
+| Scenario-2 *(control)* | 0,404 | 0,9989 | — | — | — |
+| Scenario-4 *(control)* | 0,450 | 0,9980 | — | — | — |
+| Scenario-9 *(control)* | 0,113 | 0,9912 | — | — | — |
 
-Los umbrales por red van de **0,040 a 0,472**. Un único valor global no cubre
+Los umbrales por red van de **0,040 a 0,557**. Un único valor global no cubre
 ese rango, y ese es exactamente el motivo del método.
 
-Comparación de A a B en las redes donde más se nota:
+### 5.3.1 Por qué Scenario-3 es intratable en este benchmark
 
-| Escenario | F1 en A | F1 en B | Cambio |
-|---|---|---|---|
-| Scenario-1 *(control, 15 942 falsas alarmas)* | 0,0000 | 0,9960 *(exactitud)* | **arreglado** |
-| Scenario-7 | 0,1221 | 0,9405 | **+0,82** |
-| Scenario-5 | 0,3153 | 0,6163 | **+0,30** |
-| Scenario-6 | 0,0602 | 0,2610 | **+0,20** |
-| Scenario-10 | 0,9798 | 0,9914 | +0,01 |
-| Scenario-8 | 0,4541 | 0,2443 | −0,21 |
-| Scenario-3 | 0,4172 | 0,0238 | **−0,39** |
+Su AUC es 0,4858, es decir **peor que el azar**. Se investigó y **no es un error
+del código**:
 
-**Scenario-3 empeora** en el escenario B: su AUC es 0,4808, es decir el modelo
-ordena sus instantes *peor que el azar*. Ningún umbral lo arregla.
+| Presión en el nodo de la fuga | Normal | Con fuga | Desv. típica | Señal |
+|---|---|---|---|---|
+| Scenario-10, nodo 28 | 64,07 | 25,70 | 2,93 | **13,1 σ** |
+| Scenario-10, nodo 12 | 64,94 | 61,60 | 2,43 | 1,38 σ |
+| Scenario-3, nodo 19 | 65,57 | 65,51 | 2,20 | **0,030 σ** |
+| Scenario-3, nodo 26 | 62,16 | 62,03 | 3,91 | **0,032 σ** |
+
+La fuga de Scenario-3 mueve la presión del nodo afectado **6 centímetros**, un
+3 % de la desviación típica. Es ruido. La de Scenario-10 la baja 38 metros.
+
+Comprobación adicional: entrenando y probando **dentro** de Scenario-3 el AUC
+llega a 0,8515, pero desde las otras nueve redes cae a 0,4743. Con 0,03 σ de
+señal real, el modelo encuentra en Scenario-3 patrones espurios que no existen
+en otras redes, y al transferirlos invierte el orden.
+
+**Conclusión: esa fuga es físicamente indetectable con estos datos.** Ningún
+ajuste de modelo, umbral o variables la recupera. Es un límite del benchmark
+para fugas de ese tamaño, no del prototipo.
 
 ### 5.4 La curva de compromiso
 
@@ -229,43 +274,109 @@ exactitud. Umbral global (escenario A):
 
 | Umbral | Exactitud | Precisión | Recall | F1 | Alertas |
 |---|---|---|---|---|---|
-| 0,50 | 0,8470 | 0,8956 | 0,0120 | 0,0237 | 364 |
-| 0,30 | 0,7944 | 0,3358 | 0,3373 | 0,3365 | 27 208 |
-| **0,25** | 0,7569 | 0,3252 | 0,5323 | 0,4038 | 44 338 |
-| 0,15 | 0,6212 | 0,2542 | 0,7498 | 0,3797 | 79 904 |
-| 0,10 | 0,4921 | 0,2047 | 0,7917 | 0,3253 | 104 786 |
+| **0,50** | **0,8954** | **0,9832** | 0,3293 | **0,4933** | 9 072 |
+| 0,40 | 0,8685 | 0,6183 | 0,3915 | 0,4794 | 17 153 |
+| 0,30 | 0,7536 | 0,3456 | 0,6648 | 0,4548 | 52 105 |
+| 0,25 | 0,7128 | 0,3143 | 0,7253 | 0,4386 | 62 521 |
+| 0,15 | 0,5918 | 0,2422 | 0,7702 | 0,3685 | 86 149 |
+| 0,10 | 0,4600 | 0,1999 | 0,8301 | 0,3222 | 112 494 |
+
+Sin `class_weight`, el umbral natural de **0,50** es además el óptimo: las
+probabilidades ya están bien calibradas y no hay que forzar un umbral bajo.
 
 Percentil del histórico propio (escenario B):
 
 | Percentil | Exactitud | Precisión | Recall | F1 |
 |---|---|---|---|---|
-| 80 | 0,7084 | 0,3054 | 0,5736 | 0,3986 |
-| 90 | 0,7911 | 0,4068 | 0,5231 | 0,4577 |
-| 95 | 0,8456 | 0,5471 | 0,4853 | 0,5143 |
-| 98 | 0,8788 | 0,7241 | 0,4532 | 0,5575 |
-| **99,5** | **0,8906** | **0,8385** | **0,4344** | **0,5723** |
-| 99,9 | 0,8953 | 0,9346 | 0,4070 | 0,5671 |
+| 80 | 0,7096 | 0,3147 | 0,6146 | 0,4163 |
+| 90 | 0,8048 | 0,4355 | 0,5362 | 0,4806 |
+| 95 | 0,8598 | 0,6014 | 0,4973 | 0,5444 |
+| 98 | 0,8836 | 0,7395 | 0,4773 | 0,5802 |
+| 99 | 0,8934 | 0,8194 | 0,4712 | 0,5983 |
+| 99,5 | 0,9022 | 0,9141 | 0,4627 | 0,6144 |
+| **99,9** | **0,9056** | **0,9666** | 0,4555 | **0,6192** |
 
-⚠️ El percentil 99,5 significa que en operación normal salta **una alerta de
-cada 200 pasos** (~87 al año). Que eso sea aceptable lo decide el operador, no
-la métrica: un percentil más alto reduce aún más las falsas alarmas a costa del
-recall.
+⚠️ El percentil 99,9 significa que en operación normal salta **una alerta de
+cada 1 000 pasos** (~17 al año). Que eso sea aceptable lo decide el operador, no
+la métrica: bajar el percentil recupera recall a costa de falsas alarmas.
 
 ### 5.5 La meta del 80 % de exactitud
 
-En el **escenario B se cumple** (89,06 %) y además supera la línea base trivial
-(84,54 %), que es lo que hace que la cifra sea informativa: el modelo detecta
-fugas *y* acierta en el resto, en lugar de acertar por no avisar.
-
-En el **escenario A no se cumple** (75,69 %), y es ilustrativo: la meta del
-80 % está por debajo de la línea base trivial, así que puede "cumplirse" sin
-detectar ninguna fuga.
+**Se cumple en los tres escenarios**: 89,54 % (A), 90,56 % (B), 89,02 % (C).
+En todos supera la línea base trivial (84,54 %), que es lo que hace que la cifra
+sea informativa: el modelo detecta fugas *y* acierta en el resto, en lugar de
+acertar por no avisar.
 
 Aun así, la cifra que mide capacidad de detección es el **F1 de la clase fuga**
 (0,40 en A y 0,57 en B). Recomendación para la Fase 3: redefinir la meta en
 términos de F1 o exactitud balanceada.
 
-### 5.6 El diagnóstico que motivó el umbral adaptativo
+### 5.7 Variables temporales: experimento con resultado NEGATIVO
+
+El modelo mira un solo instante, y las fugas `incipient` son intermitentes, así
+que la hipótesis era que el contexto temporal ayudaría. **Se implementó y se
+midió. NoAyuda en el escenario de despliegue que importa.**
+
+`data_loader.py` calcula *rolling* causal (ventana trasera, nunca futuro) por
+escenario. Se probaron media y máximo en ventanas de 6, 24 y 48 h:
+
+**Cribado por AUC** (solo AUC, porque aísla la calidad de las variables del
+efecto del umbral):
+
+| Configuración | nvar | S-3 | S-5 | S-6 | S-7 | S-8 | S-10 | Media |
+|---|---|---|---|---|---|---|---|---|
+| Solo instantáneas | 65 | 0,4836 | 0,7190 | 0,5839 | 0,9997 | 0,6649 | 0,9999 | 0,7418 |
+| + media 6 h y 24 h | 130 | 0,4153 | 0,6616 | 0,5782 | 0,9808 | 0,4785 | 0,9888 | 0,6839 |
+| **+ máximo 6/24/48 h** | 260 | 0,4224 | **0,8485** | 0,5615 | 1,0000 | **0,7711** | 0,9981 | **0,7669** |
+
+Hallazgo físico: **la media empeora, el máximo mejora**. Promediar 24 h aplana
+la señal intermitente de una fuga `incipient`; el máximo la conserva, porque
+recuerda que hubo caudal aunque ahora sea cero.
+
+**Medición completa del pipeline** (`train.py --temporal max6-24-48`):
+
+| Despliegue | F1 sin | F1 con | Cambio |
+|---|---|---|---|
+| A) Red nueva | 0,4038 | **0,4419** | **+9,4 %** |
+| B) Red conocida | 0,5723 | 0,5718 | −0,1 % |
+
+Y por red (escenario B):
+
+| Red | F1 sin | F1 con | Cambio |
+|---|---|---|---|
+| Scenario-8 | 0,2443 | 0,5441 | **+0,30** |
+| Scenario-3 | 0,0238 | 0,2454 | **+0,22** |
+| Scenario-6 | 0,2610 | 0,2977 | +0,04 |
+| Scenario-10 | 0,9914 | 0,9965 | +0,01 |
+| Scenario-5 | 0,6163 | 0,5335 | −0,08 |
+| Scenario-7 | 0,9405 | 0,6031 | **−0,34** |
+
+**Decisión: no se activa por defecto.** En el escenario B, que es el
+recomendado, el F1 no se mueve (−0,1 %) mientras el modelo crece de 65 a 260
+variables y la precisión se desploma de 0,84 a 0,63. La mejora se concentra en
+el escenario A, que es el menos relevante, y el resultado es una pérdida neta
+por red (Scenario-7 cae 0,34).
+
+### 5.8 El diagnóstico que motivó el umbral adaptativo
+
+Queda disponible como ablación reproducible:
+
+```powershell
+python train.py --temporal max6-24-48 \
+       --model-out models/leak_temporal.joblib \
+       --report-out logs/train_temporal.json
+```
+
+Si en la Fase 3 cambia el umbral de decisión (por ejemplo, si perder fugas sale
+mucho más caro que avisar de más), conviene volver a medir: con `--beta 2` el
+recall pesa más y las temporales podrían volver a compensar.
+
+Por qué el agente sigue soportándolas: mantiene un búfer de las últimas
+observaciones y durante el calentamiento (las primeras 96) no alerta, porque
+las variables temporales se calculan sobre una ventana parcial y no son
+comparables con las de régimen estable. Una prueba verifica que el búfer del
+agente reproduce **exactamente** (`diferencia < 1e-9`) lo que calculó
+`data_loader`.
 
 El problema **no** era el modelo ni la evaluación. Se comprobó en tres pasos:
 
@@ -275,9 +386,9 @@ empieza la fuga): F1 0,4175 frente a 0,4038 del Leave-One-Scenario-Out.
 Prácticamente idéntico.
 
 **2. El umbral óptimo variaba por red.** Si cada escenario tuviera su umbral
-óptimo (oracle, no desplegable), el F1 subía de 0,4038 a 0,66: **+0,26 de
-ganancia media**. Los umbrales óptimos iban de **0,010 a 0,400**, un factor de
-40. El modelo ordenaba bien y fallaba al decidir cuándo avisar.
+óptimo (oracle, no desplegable), el F1 subía **+0,26**. Los umbrales óptimos
+iban de **0,010 a 0,400**, un factor de 40. El modelo ordenaba bien y fallaba al
+decidir cuándo avisar.
 
 **3. La causa es que cada red es una realización hidráulica distinta.** La
 distancia entre las medias de los escenarios es de 48 a 346 unidades, mientras
@@ -304,7 +415,7 @@ tipo "si la presión del nodo X baja de Y, hay fuga".
 
 | Elemento | Rol |
 |---|---|
-| `RandomForestClassifier` | **El modelo de aprendizaje automático.** Aprende la relación entre las 65 variables y la etiqueta a partir de datos históricos. |
+| `RandomForestClassifier` | **El modelo de aprendizaje automático.** Aprende la relación entre las 65 variables y la etiqueta a partir de datos históricos. Sin `class_weight`: medido, ponderar las clases empeora el AUC (§5.1.1). |
 | Umbral de decisión | Parámetro que el agente fija según el despliegue: global si no tiene histórico de la red, o el percentil del propio histórico si lo tiene. |
 | `agent.py` | Solo transporta, aplica el umbral y registra. No razona. |
 
@@ -384,15 +495,16 @@ la proporcionó.
 El agente calibró su umbral con los primeros 30 días de cada red y vigiló el
 resto del año:
 
-| Escenario | Umbral fijado por el agente | Alertas | Resultado |
-|---|---|---|---|
-| Scenario-1 *(control)* | 0,0200 | 105 | 105 falsas alarmas (antes: 15 942) |
-| Scenario-10 | 0,0067 | 7 752 | TP 7 704 · FP 48 · FN 0 |
-| Scenario-7 | 0,0120 | 389 | TP 316 · FP 73 · FN 0 |
+| Escenario | Umbral | Exactitud | Precisión | Recall | F1 |
+|---|---|---|---|---|---|
+| Scenario-1 *(control)* | 0,0200 | 0,9940 | — | — | — |
+| Scenario-10 | 0,0067 | 0,9973 | 0,9938 | 1,0000 | 0,9966 |
+| Scenario-7 | 0,0246 | 0,9992 | 0,9576 | 1,0000 | 0,9785 |
 
 En Scenario-1, que no tiene ninguna fuga, el modelo puntúa ese año entero
-cerca de cero (máximo 0,04), así que la calibración fija un umbral bajo y el
-resultado son 105 avisos en 17 520 pasos en vez de 15 942.
+cerca de cero, así que la calibración fija un umbral bajo y el resultado son
+unas 100 alertas en 17 520 pasos, en lugar de las 15 942 que producía antes
+de quitar `class_weight="balanced"`.
 
 ⚠️ Estos resultados son **en muestra**: el modelo se entrenó con los 10
 escenarios. No sirven como prueba de generalización. La cifra oficial es la
@@ -413,60 +525,53 @@ sección 5.
 
 ---
 
-1. **F1 de fuga = 0,57 en el escenario de despliegue real** (red conocida), 0,40
-   en red nueva. Útil pero moderado, y muy desigual entre redes.
-2. **El modelo no rinde igual en todas las redes.** Scenario-10 y Scenario-7 se
-   resuelven casi por completo; Scenario-3 tiene AUC 0,4808 (peor que el azar) y
-   ningún umbral lo arregla.
-3. **Scenario-3 y Scenario-8 empeoran con el umbral adaptativo** (F1 0,42 → 0,02
-   y 0,45 → 0,24). El método es mejor en agregado, pero no gana en todas las
-   redes.
-4. **El escenario de despliegue cambia la cifra oficial.** Con red conocida se
-   cumple la meta del 80 %; con red nueva no se cumple. El README reporta ambos
-   porque responder a "cuál es el desempeño" sin decir en qué situación es
-   sería engañoso.
-5. **Un percentil 99,5 implica ~87 falsas alertas al año** en operación normal.
-   El recall cae de 0,53 a 0,43 al subir el umbral: es un compromiso, no una
-   mejora gratuita.
-6. **No se usan variables temporales.** El modelo mira solo el instante actual.
-   Una ventana de las últimas horas debería ayudar sobre todo con las fugas
-   `incipient`, cuyo caudal se corta a cero.
-7. **Las fugas `incipient` son intrínsecamente difíciles.** Buena parte de los
-   positivos está en tramos donde la fuga no descarga caudal.
-8. **El ambiente es un conjunto de datos, no una red viva.** No hay conexión
+1. **F1 de fuga = 0,62 en el escenario recomendado (red conocida)**, 0,49 en red
+   nueva. Util pero moderado, y muy desigual entre redes.
+2. **Una de las seis redes con fuga es indetectable.** La de Scenario-3 mueve
+   la presion 0,03 sigma (5.3.1). Es un limite del benchmark para fugas de ese
+   tamano, no del prototipo. Ningun metodo la recuperara con estos datos.
+3. **El recall se sacrifica en favor de la precision.** Con el punto de
+   operacion actual se pierde ~55 % de las fugas (FN 14 751) a cambio de 427
+   falsas alarmas al ano. Si el coste relativo cambia, hay que mover el
+   percentil: la seccion 5.4 da la curva completa.
+4. **No se usan variables temporales por defecto.** Se implementaron y midieron
+   (5.7): mejoran el escenario de red nueva pero no el de red conocida, que es
+   el recomendado. Quedan disponibles con `--temporal`.
+5. **Entrenar con el historico propio de la red no aporta** (5.1.2): solo
+   contiene ejemplos negativos. Haria falta historico propio de fugas
+   anteriores, que este dataset no tiene.
+6. **Las fugas `incipient` son intrinsecamente dificiles.** Buena parte de los
+   positivos esta en tramos donde la fuga no descarga caudal.
+7. **El ambiente es un conjunto de datos, no una red viva.** No hay conexion
    con EPANET en tiempo real: el agente lee el resultado de simulaciones.
-9. **El periodo de calibración lo declara el operador.** El método asume 30
-   días sin fugas; si el periodo estuviera contaminado, el umbral saldría
-   demasiado alto y se perderían fugas. El agente comprueba y avisa si el
-   periodo contiene positivos, pero esa comprobación usa la etiqueta y solo
+8. **El periodo de calibracion lo declara el operador.** El metodo asume 30
+   dias sin fugas; si el periodo estuviera contaminado, el umbral saldria
+   demasiado alto y se perderian fugas. El agente comprueba y avisa si el
+   periodo contiene positivos, pero esa comprobacion usa la etiqueta y solo
    sirve para informar, no para decidir.
-10. **En el escenario B el modelo se entrena con las otras nueve redes, no con
-    datos propios de la red evaluada.** Una empresa de agua también aportaría su
-    propio histórico de fugas pasadas, lo que probablemente mejoraría el recall.
-    No se ha implementado.
-11. **Optimismo residual declarado:** el umbral global y el percentil se eligen
+9. **Solo un subconjunto.** Todo se ha medido sobre Hanoi_CMH. No se puede
+   afirmar que el comportamiento se repita en otras redes de LeakDB, porque no
+   hay mas datos disponibles en este entorno.
+10. **Optimismo residual declarado:** el umbral global y el percentil se eligen
     sobre las mismas predicciones fuera de muestra que se reportan. Son
-    escalares únicos derivados de 175 200 filas, así que el optimismo debería ser
+    escalares unicos derivados de 175 200 filas, asi que el optimismo deberia ser
     despreciable, pero no es cero.
+11. **El coste relativo de una falsa alarma no esta fijado.** Se eligio el
+    punto que maximiza F1, es decir, tratando por igual ambos errores. Si
+    perder una fuga cuesta mucho mas, hay que fijar beta > 1 y volver a medir.
 
 ---
 
 ## 10. Tareas pendientes para la Fase 3
 
-- [x] **Umbral adaptativo por red** a partir del histórico limpio (+41,7 % de F1).
-- [x] **Separar los dos escenarios de despliegue** (red nueva / red conocida),
-      porque dan cifras distintas y antes solo se reportaba una.
-- [ ] Añadir el histórico propio de la red al entrenamiento del escenario B
-      (hoy solo se usa para calibrar).
-- [ ] Añadir variables temporales (medias móviles, deltas, ventana deslizante),
-      especialmente para las fugas `incipient`.
-- [ ] Probar normalización por perfil horario (mediana propia de cada nodo a
-      cada hora del día) como forma alternativa de quitar el efecto de la
-      realización hidráulica.
-- [ ] Evaluar un modelo que use balance de masa (caudal de entrada menos
-      demanda aplicada) en lugar de valores absolutos.
-- [ ] Revisar `class_weight`: con prevalencias del 1,8 % al 44 %, `balanced`
-      distorsiona las probabilidades.
-- [ ] Estudiar Scenario-3: por qué el AUC cae por debajo de 0,5.
-- [ ] Probar con otro subconjunto de LeakDB para comprobar que el
-      comportamiento se repite fuera de Hanoi.
+Cerradas en esta fase:
+
+- [x] **Umbral adaptativo por red** a partir del histórico limpio.
+- [x] **Separar los escenarios de despliegue** (red nueva / red conocida /
+      red conocida entrenando también con su histórico).
+- [x] **Quitar `class_weight="balanced"`**, que empeoraba el AUC y generaba
+      29 918 falsas alarmas (§5.1.1).
+- [x] **Variables temporales implementadas y medidas**: no se activan por
+      defecto porque en el escenario recomendado el F1 no mejora (§5.7).
+- [x] **Diagnóstico de Scenario-3**: fuga indetectable por señal de 0,03 σ (§5.3.1).
+- [x] **Histórico propio como dato de entrenamiento**: medido, no aporta (§5.1.2).

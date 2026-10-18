@@ -65,7 +65,7 @@ from sklearn.metrics import (accuracy_score, confusion_matrix, f1_score,
                              precision_score, recall_score, roc_auc_score)
 from sklearn.model_selection import LeaveOneGroupOut
 
-from data_loader import RANDOM_SEED, Dataset, load_dataset
+from data_loader import RANDOM_SEED, TEMPORAL_PRESETS, Dataset, load_dataset
 
 MODEL_PATH = Path("models/leak_classifier.joblib")
 REPORT_PATH = Path("logs/train_report.json")
@@ -259,6 +259,83 @@ def curva_percentiles(ds: Dataset, prob: np.ndarray, pasos: int, beta: float = 1
     return salida
 
 
+def evaluacion_red_conocida(ds: Dataset, n_estimators: int, balance: str, seed: int,
+                           pasos_calibracion: int, percentil: float, beta: float) -> dict:
+    """ESCENARIO B REALISTA: el operador tambien entrena con su propia red.
+
+    Para cada escenario S:
+      - Se entrena con las otras 9 redes MAS los pasos de S anteriores al
+        inicio de su fuga (el historico limpio que la empresa ya tiene).
+      - El umbral se fija con esas mismas observaciones limpias de S.
+      - Se evalua sobre el resto de S, que el modelo no vio.
+
+    El historico limpio de S entra en dos sitios: como datos de
+    entrenamiento y como referencia para calibrar. Por eso se separa en dos
+    mitades: la primera entrena, la segunda calibra. Si se usara el mismo
+    tramo para ambas cosas, el modelo ya habria encajado esas filas y sus
+    puntuaciones serian artificialmente bajas, con un umbral demasiado
+    sensible.
+    """
+    por_esc: dict[str, Any] = {}
+    y_true, y_pred, probabilidades = [], [], []
+    detalle = {}
+
+    for esc in ds.scenarios:
+        idx = np.where(ds.scenario == esc)[0]
+        ys = ds.y_int[idx]
+        corte = int(pasos_calibracion / 2)
+
+        idx_entrena = np.concatenate([np.where(ds.scenario != esc)[0], idx[:corte]])
+        idx_calibra = idx[corte:pasos_calibracion]
+        idx_evalua = idx[pasos_calibracion:]
+
+        m = build_model(n_estimators, balance, seed)
+        m.fit(ds.X.iloc[idx_entrena], ds.y_int[idx_entrena])
+
+        # La mitad de calibracion NO estaba en idx_entrena, asi que el mismo
+        # modelo la puntua sin haberla visto: su umbral es honesto.
+        p_cal = m.predict_proba(ds.X.iloc[idx_calibra])[:, 1]
+        th = float(np.percentile(p_cal, percentil))
+
+        p_eval = m.predict_proba(ds.X.iloc[idx_evalua])[:, 1]
+        pred = (p_eval >= th).astype(int)
+        detalle[esc] = {"umbral": round(th, 6),
+                        "pasos_entrenamiento": int(len(idx_entrena)),
+                        "pasos_calibracion": int(len(idx_calibra)),
+                        "pasos_evaluacion": int(len(idx_evalua)),
+                        **metrics(ds.y_int[idx_evalua], pred, p_eval)}
+
+        y_true.append(ds.y_int[idx_evalua])
+        y_pred.append(pred)
+        probabilidades.append(p_eval)
+
+    yt = np.concatenate(y_true)
+    yp = np.concatenate(y_pred)
+    pp = np.concatenate(probabilidades)
+    glob = metrics(yt, yp, pp)
+    glob["fbeta"] = round(fbeta(yt, yp, beta), 6)
+    con_fuga = {k: v for k, v in detalle.items() if v["n_reales_fuga"] > 0}
+
+    return {
+        "descripcion": (f"El operador entrena con las otras redes Y con los "
+                        f"{corte} pasos previos a la fuga de la SUYA, calibra "
+                        f"con los {pasos_calibracion - corte} siguientes y vigila "
+                        f"el resto."),
+        "percentil": percentil,
+        "pasos_calibracion": pasos_calibracion,
+        "pasos_entrenamiento_propio": corte,
+        "n_evaluados": int(len(yt)),
+        "global": glob,
+        "media_por_escenario": {
+            c: round(float(np.mean([v[c] for v in detalle.values()])), 6)
+            for c in ("accuracy", "precision", "recall", "f1")},
+        "media_solo_con_fuga": {
+            c: round(float(np.mean([v[c] for v in con_fuga.values()])), 6)
+            for c in ("accuracy", "precision", "recall", "f1")} if con_fuga else None,
+        "por_escenario": detalle,
+    }
+
+
 # --------------------------------------------------------------------------
 # Programa
 # --------------------------------------------------------------------------
@@ -268,7 +345,13 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Entrena el detector de fugas de AquaSense-Agent.")
     p.add_argument("--data-dir", type=Path, default=Path("data"))
     p.add_argument("--n-estimators", type=int, default=150)
-    p.add_argument("--balance", choices=["none", "class_weight"], default="class_weight")
+    p.add_argument("--balance", choices=["none", "class_weight"], default="none",
+                   help="Ponderar las clases. 'none' es el valor por defecto porque "
+                        "medido en este dataset 'balanced' EMPEORA el modelo: AUC "
+                        "0,7638 sin ponderar frente a 0,7031 con 'balanced', y 152 "
+                        "falsas alarmas frente a 29.918 en el escenario A. Con 15,46% "
+                        "de positivos, 'balanced' infla la clase 1 y el bosque "
+                        "aprende un criterio peor.")
     p.add_argument("--beta", type=float, default=1.0,
                    help="F-beta para elegir el umbral fijo. beta>1 prioriza recall.")
     p.add_argument("--percentil-calibracion", type=float, default=0.0,
@@ -278,16 +361,25 @@ def main(argv: list[str] | None = None) -> int:
                    help="Dias iniciales sin fugas usados para calibrar cada red")
     p.add_argument("--seed", type=int, default=RANDOM_SEED)
     p.add_argument("--with-demands", action="store_true")
+    p.add_argument("--temporal", choices=list(TEMPORAL_PRESETS), default="ninguno",
+                   help="Variables temporales a anadir (ventana trasera, causal)")
+    p.add_argument("--historial-propio", action="store_true",
+                   help="Escenario C: entrena tambien con el historico limpio "
+                        "de cada red, no solo con las otras redes")
     p.add_argument("--model-out", type=Path, default=MODEL_PATH)
     p.add_argument("--report-out", type=Path, default=REPORT_PATH)
     a = p.parse_args(argv)
+    a.historial_propio_desc = (
+        "El operador tiene su propio historico limpio y lo usa tambien como "
+        "dato de entrenamiento.")
 
     print("=" * 78)
     print("AQUASENSE-AGENT  |  Entrenamiento del clasificador de fugas")
     print("=" * 78)
 
-    ds = load_dataset(a.data_dir, include_demands=a.with_demands)
+    ds = load_dataset(a.data_dir, include_demands=a.with_demands, temporal=a.temporal)
     print(f"\n  Dataset   : {ds.describe()}")
+    print(f"  Temporales: {ds.temporal_descrito()}")
     print(f"  Excluidas : sin variacion={ds.excluded['presion_sin_variacion']}, "
           f"constantes={ds.excluded['constantes'] or 'ninguna'}")
     print(f"  No entrada: {'; '.join(ds.excluded['no_es_entrada'])}")
@@ -427,6 +519,36 @@ def main(argv: list[str] | None = None) -> int:
           f"{max(e['umbral'] for e in adapt['por_escenario'].values()):.3f}: "
           "un valor global no cubre ese rango.")
 
+    if a.historial_propio:
+        print(f"\n  C) RED CONOCIDA, ENTRENANDO TAMBIEN CON SU HISTORIAL PROPIO")
+        print(f"     {a.historial_propio_desc}")
+        print("     Ademas del historico limpio, se usa como dato de ENTRENAMIENTO.")
+        print("     Se separa en dos mitades: la primera entrena y la segunda")
+        print("     calibra, para que el umbral no se contamine con filas vistas.\n")
+        propio = evaluacion_red_conocida(ds, a.n_estimators, a.balance, a.seed,
+                                         pasos, pct_elegido, a.beta)
+        pg = propio["global"]
+        print(f"  {'escenario':<34}{'exactitud':>11}{'precision':>11}{'recall':>10}{'F1':>9}")
+        print("  " + "-" * 75)
+        print(f"  {'B) solo historico para calibrar':<34}{ag['accuracy']:>11.4f}"
+              f"{ag['precision']:>11.4f}{ag['recall']:>10.4f}{ag['f1']:>9.4f}")
+        print(f"  {'C) tambien para entrenar':<34}{pg['accuracy']:>11.4f}"
+              f"{pg['precision']:>11.4f}{pg['recall']:>10.4f}{pg['f1']:>9.4f}")
+        print(f"  {'diferencia':<34}{pg['accuracy'] - ag['accuracy']:>+11.4f}"
+              f"{pg['precision'] - ag['precision']:>+11.4f}"
+              f"{pg['recall'] - ag['recall']:>+10.4f}{pg['f1'] - ag['f1']:>+9.4f}")
+        print(f"\n     Meta del {TARGET_ACCURACY:.0%}: "
+              f"{'CUMPLIDA' if pg['accuracy'] >= TARGET_ACCURACY else 'NO CUMPLIDA'} "
+              f"({pg['accuracy']:.2%}, base {base:.2%})")
+        print(f"\n  {'Red':<12}{'umbral':>9}{'exactitud':>11}{'precision':>11}{'recall':>9}{'F1':>8}")
+        print("  " + "-" * 60)
+        for esc, e in propio["por_escenario"].items():
+            control = " (control)" if e["n_reales_fuga"] == 0 else ""
+            print(f"  {esc:<12}{e['umbral']:>9.4f}{e['accuracy']:>11.4f}{e['precision']:>11.4f}"
+                  f"{e['recall']:>9.4f}{e['f1']:>8.4f}{control}")
+    else:
+        propio = None
+
     print("\n  Entrenando el modelo final con los 10 escenarios...")
     final = build_model(a.n_estimators, a.balance, a.seed)
     final.fit(ds.X, ds.y_int)
@@ -445,6 +567,7 @@ def main(argv: list[str] | None = None) -> int:
         "metodo_umbral": "adaptativo_por_percentil",
         "percentil_calibracion": pct_elegido,
         "dias_calibracion": a.dias_calibracion,
+        "temporal": ds.temporal,
         "n_estimators": a.n_estimators, "balance": a.balance,
         "con_demandas": a.with_demands,
         "entrenado": datetime.now().isoformat(timespec="seconds"),
@@ -457,6 +580,7 @@ def main(argv: list[str] | None = None) -> int:
                           "with_demands": a.with_demands,
                           "percentil_calibracion": pct_elegido,
                           "percentil_pedido": a.percentil_calibracion,
+                          "temporal": a.temporal,
                           "dias_calibracion": a.dias_calibracion},
         "entorno": {"python": platform.python_version(), "numpy": np.__version__,
                     "pandas": pd.__version__, "scikit_learn": sklearn.__version__},
@@ -495,6 +619,7 @@ def main(argv: list[str] | None = None) -> int:
                     "matriz_confusion": cm_b.tolist(),
                     "meta_cumplida": bool(cumple_b),
                 },
+                **({"C_red_conocida_con_historial": propio} if propio else {}),
             },
             "curva_umbral_global": curva,
             "curva_percentiles": cp,

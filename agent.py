@@ -76,6 +76,12 @@ class LeakDetectionAgent:
         self.bundle = joblib.load(model_path)
         self.modelo = self.bundle["model"]
         self.variables = self.bundle["feature_names"]
+        # Variables temporales: el agente necesita historial para calcularlas.
+        self.temporal = self.bundle.get("temporal", [])
+        self.ventana_max = max((w for _, _, w in self.temporal), default=0)
+        self._base = [v for v in self.variables
+                      if not any(v.endswith(f"_{t}") for t, _, _ in self.temporal)]
+        self._buffer: list[np.ndarray] = []
         self.percentil = percentil if percentil is not None else \
             self.bundle.get("percentil_calibracion", 90.0)
         # Hasta calibrar, se usa el umbral global como valor provisional.
@@ -137,20 +143,39 @@ class LeakDetectionAgent:
         Devuelve un vector con EXACTAMENTE las variables que el modelo
         espera, en el mismo orden. Aqui es donde se decide que se ve:
         cualquier clave que no este en self.variables se descarta.
+
+        Si el modelo usa variables temporales, se calculan aqui a partir de
+        un buffer de las ultimas observaciones. Mientras el buffer no este
+        lleno la ventana es parcial: es la fase de calentamiento, y el
+        agente lo indica con 'caliente=False' para que no se alerte todavia.
         """
-        faltantes = [v for v in self.variables if v not in observacion["valores"]]
+        faltantes = [v for v in self._base if v not in observacion["valores"]]
         if faltantes:
             raise ValueError(
                 f"Faltan {len(faltantes)} variables en la percepcion: {faltantes[:5]}...")
+
+        vector_base = np.array([observacion["valores"][v] for v in self._base],
+                               dtype=np.float64)
+        self._buffer.append(vector_base)
+        if len(self._buffer) > self.ventana_max:
+            self._buffer.pop(0)
+
+        fila = dict(zip(self._base, vector_base))
+        for tag, metodo, w in self.temporal:
+            reciente = np.array(self._buffer[-w:])
+            valor = reciente.max(axis=0) if metodo == "max" else reciente.mean(axis=0)
+            fila.update({f"{c}_{tag}": valor[i] for i, c in enumerate(self._base)})
+
         # DataFrame con los nombres de columna: el modelo se entreno con un
         # DataFrame y sin los nombres sklearn avisa en cada prediccion.
-        vector = pd.DataFrame([[observacion["valores"][v] for v in self.variables]],
+        vector = pd.DataFrame([[fila[v] for v in self.variables]],
                               columns=self.variables)
         return {
             "escenario": observacion["escenario"],
             "timestamp": observacion["timestamp"],
             "vector": vector,
             "n_variables": len(self.variables),
+            "caliente": len(self._buffer) >= self.ventana_max,
         }
 
     # ---------------- DECISION ----------------
@@ -164,9 +189,16 @@ class LeakDetectionAgent:
         }
 
     # ---------------- ACCION ----------------
-    def act(self, decision: dict) -> str:
+    def act(self, decision: dict, caliente: bool = True) -> str:
         """Ejecuta la accion correspondiente. En un sistema real, aqui se
-        enviaria el aviso al centro de control; aqui queda registrado."""
+        enviaria el aviso al centro de control; aqui queda registrado.
+
+        Durante el calentamiento (buffer de historial incompleto) no se alerta:
+        las variables temporales estan calculadas sobre una ventana parcial y
+        no son comparables con las de regime estable.
+        """
+        if not caliente:
+            return "CALENTAMIENTO"
         return ALERTA if decision["decision"] == "FUGA" else NORMAL
 
     # ---------------- REGISTRO ----------------
@@ -201,6 +233,7 @@ class LeakDetectionAgent:
             Se usa despues de decidir; nunca entra en el modelo.
         """
         inicio = datetime.now()
+        n_calentamiento = 0
         for i, obs in enumerate(observaciones):
             if i == n_calibracion and n_calibracion > 0 and not self.calibrado:
                 # El agente ya vio el periodo limpio; fija su umbral ahora.
@@ -208,16 +241,20 @@ class LeakDetectionAgent:
 
             percepcion = self.perceive(obs)
             decision = self.decide(percepcion)
-            accion = self.act(decision)
+            accion = self.act(decision, percepcion["caliente"])
             etiqueta = (incluir_etiquetas or {}).get(i)
             self.log_event(percepcion, decision, accion, etiqueta)
             self.n_observaciones += 1
-            if accion == ALERTA:
+            if accion == "CALENTAMIENTO":
+                n_calentamiento += 1
+            elif accion == ALERTA:
                 self.n_alertas += 1
 
         return {
             "observaciones": self.n_observaciones,
             "observaciones_calibracion": n_calibracion,
+            "observaciones_calentamiento": n_calentamiento,
+            "ventana_maxima_pasos": self.ventana_max,
             "alertas": self.n_alertas,
             "tasa_alerta": round(self.n_alertas / self.n_observaciones, 6)
             if self.n_observaciones else 0.0,
