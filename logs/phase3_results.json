@@ -1,0 +1,753 @@
+{
+  "seeds": [
+    42,
+    123,
+    456,
+    789,
+    999
+  ],
+  "scenarios": [
+    "Scenario-1",
+    "Scenario-10",
+    "Scenario-2",
+    "Scenario-3",
+    "Scenario-4",
+    "Scenario-5",
+    "Scenario-6",
+    "Scenario-7",
+    "Scenario-8",
+    "Scenario-9"
+  ],
+  "raw": [
+    {
+      "A": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 95,
+          "timestep_acc": 0.9944634703196347
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.9532534246575343
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 1,
+          "timestep_acc": 0.9999429223744293
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6267123287671232
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 3,
+          "timestep_acc": 0.9998287671232877
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7060502283105022
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.9042808219178082
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 0.9997146118721462
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7699200913242009
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      },
+      "B": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 95,
+          "timestep_acc": 0.9944634703196347
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.9532534246575343
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 1,
+          "timestep_acc": 0.9999429223744293
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6267123287671232
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 3,
+          "timestep_acc": 0.9998287671232877
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7060502283105022
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.9042808219178082
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 0.9997146118721462
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7699200913242009
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      }
+    },
+    {
+      "A": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 93,
+          "timestep_acc": 0.9945776255707762
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.8067351598173516
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 5,
+          "timestep_acc": 0.9997146118721462
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6274543378995434
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 15,
+          "timestep_acc": 0.9991438356164384
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7039954337899543
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.9042808219178082
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 0.9996575342465753
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7549657534246575
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      },
+      "B": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 124,
+          "timestep_acc": 0.9928082191780822
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.8194634703196347
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 8,
+          "timestep_acc": 0.9995433789954338
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6274543378995434
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 22,
+          "timestep_acc": 0.9986872146118722
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7046803652968037
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.9042808219178082
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 0.9996575342465753
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7574771689497717
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      }
+    },
+    {
+      "A": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 382,
+          "timestep_acc": 0.9763698630136987
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.9337328767123287
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 3,
+          "timestep_acc": 0.9998287671232877
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6272260273972603
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 4,
+          "timestep_acc": 0.9997716894977169
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7033675799086758
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.9055936073059361
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7557648401826484
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      },
+      "B": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 131,
+          "timestep_acc": 0.992351598173516
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.8806506849315069
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 1,
+          "timestep_acc": 0.9999429223744293
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6274543378995434
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6944634703196347
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.904337899543379
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7421232876712329
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      }
+    },
+    {
+      "A": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 105,
+          "timestep_acc": 0.993892694063927
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.8301940639269406
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6273972602739726
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 16,
+          "timestep_acc": 0.9990867579908675
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7102739726027397
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.9042808219178082
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 0.9998287671232877
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7651826484018265
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      },
+      "B": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 121,
+          "timestep_acc": 0.9929794520547945
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.8443493150684932
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6273972602739726
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 19,
+          "timestep_acc": 0.9989155251141553
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7107876712328767
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.9042808219178082
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 0.9997716894977169
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7676369863013699
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      }
+    },
+    {
+      "A": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 137,
+          "timestep_acc": 0.9920091324200914
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.9186643835616438
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 6,
+          "timestep_acc": 0.9996575342465753
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6274543378995434
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 8,
+          "timestep_acc": 0.9995433789954338
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6981164383561644
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.9042808219178082
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 0.9999429223744293
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7518264840182648
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      },
+      "B": {
+        "Scenario-1": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 137,
+          "timestep_acc": 0.9920091324200914
+        },
+        "Scenario-10": {
+          "n_events": 2,
+          "detected_any": 2,
+          "detected_50": 2,
+          "false_alarms": 0,
+          "timestep_acc": 0.9186643835616438
+        },
+        "Scenario-2": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 6,
+          "timestep_acc": 0.9996575342465753
+        },
+        "Scenario-3": {
+          "n_events": 2,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6274543378995434
+        },
+        "Scenario-4": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 8,
+          "timestep_acc": 0.9995433789954338
+        },
+        "Scenario-5": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.6981164383561644
+        },
+        "Scenario-6": {
+          "n_events": 1,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.9042808219178082
+        },
+        "Scenario-7": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 1,
+          "false_alarms": 0,
+          "timestep_acc": 0.9999429223744293
+        },
+        "Scenario-8": {
+          "n_events": 1,
+          "detected_any": 1,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 0.7518264840182648
+        },
+        "Scenario-9": {
+          "n_events": 0,
+          "detected_any": 0,
+          "detected_50": 0,
+          "false_alarms": 0,
+          "timestep_acc": 1.0
+        }
+      }
+    }
+  ]
+}

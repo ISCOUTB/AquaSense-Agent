@@ -1,0 +1,494 @@
+{
+  "generado": "2026-10-18T15:38:59",
+  "oficial": {
+    "escenarios_despliegue": {
+      "A_red_nueva": {
+        "umbral": 0.5,
+        "metricas": {
+          "accuracy": 0.895417,
+          "precision": 0.983245,
+          "recall": 0.329261,
+          "f1": 0.493322,
+          "matriz_confusion": [
+            [
+              147957,
+              152
+            ],
+            [
+              18171,
+              8920
+            ]
+          ],
+          "n_muestras": 175200,
+          "n_reales_fuga": 27091,
+          "n_alertas": 9072,
+          "auc": 0.763769
+        },
+        "por_escenario": {
+          "Scenario-1": {
+            "accuracy": 0.994463,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "matriz_confusion": [
+              [
+                17423,
+                97
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 0,
+            "n_alertas": 97,
+            "auc": null
+          },
+          "Scenario-10": {
+            "accuracy": 0.953253,
+            "precision": 1.0,
+            "recall": 0.893692,
+            "f1": 0.943862,
+            "matriz_confusion": [
+              [
+                9816,
+                0
+              ],
+              [
+                819,
+                6885
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 7704,
+            "n_alertas": 6885,
+            "auc": 0.99997
+          },
+          "Scenario-2": {
+            "accuracy": 0.999943,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "matriz_confusion": [
+              [
+                17519,
+                1
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 0,
+            "n_alertas": 1,
+            "auc": null
+          },
+          "Scenario-3": {
+            "accuracy": 0.626712,
+            "precision": 0.259259,
+            "recall": 0.001072,
+            "f1": 0.002136,
+            "matriz_confusion": [
+              [
+                10973,
+                20
+              ],
+              [
+                6520,
+                7
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 6527,
+            "n_alertas": 27,
+            "auc": 0.485821
+          },
+          "Scenario-4": {
+            "accuracy": 0.999829,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "matriz_confusion": [
+              [
+                17517,
+                3
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 0,
+            "n_alertas": 3,
+            "auc": null
+          },
+          "Scenario-5": {
+            "accuracy": 0.70605,
+            "precision": 1.0,
+            "recall": 0.131535,
+            "f1": 0.232489,
+            "matriz_confusion": [
+              [
+                11590,
+                0
+              ],
+              [
+                5150,
+                780
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 5930,
+            "n_alertas": 780,
+            "auc": 0.723324
+          },
+          "Scenario-6": {
+            "accuracy": 0.904281,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "matriz_confusion": [
+              [
+                15843,
+                0
+              ],
+              [
+                1677,
+                0
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 1677,
+            "n_alertas": 0,
+            "auc": 0.664769
+          },
+          "Scenario-7": {
+            "accuracy": 0.999715,
+            "precision": 0.984424,
+            "recall": 1.0,
+            "f1": 0.992151,
+            "matriz_confusion": [
+              [
+                17199,
+                5
+              ],
+              [
+                0,
+                316
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 316,
+            "n_alertas": 321,
+            "auc": 1.0
+          },
+          "Scenario-8": {
+            "accuracy": 0.76992,
+            "precision": 0.97286,
+            "recall": 0.188779,
+            "f1": 0.3162,
+            "matriz_confusion": [
+              [
+                12557,
+                26
+              ],
+              [
+                4005,
+                932
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 4937,
+            "n_alertas": 958,
+            "auc": 0.656213
+          },
+          "Scenario-9": {
+            "accuracy": 1.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "matriz_confusion": [
+              [
+                17520,
+                0
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "n_muestras": 17520,
+            "n_reales_fuga": 0,
+            "n_alertas": 0,
+            "auc": null
+          }
+        }
+      },
+      "B_red_conocida": {
+        "percentil": 99.9,
+        "metricas": {
+          "accuracy": 0.905609,
+          "precision": 0.966554,
+          "recall": 0.455502,
+          "f1": 0.619198,
+          "matriz_confusion": [
+            [
+              133282,
+              427
+            ],
+            [
+              14751,
+              12340
+            ]
+          ],
+          "n_muestras": 160800,
+          "n_reales_fuga": 27091,
+          "n_alertas": 12767,
+          "auc": 0.763411,
+          "fbeta": 0.619198
+        },
+        "por_escenario": {
+          "Scenario-1": {
+            "accuracy": 0.999502,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "matriz_confusion": [
+              [
+                16072,
+                8
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 0,
+            "n_alertas": 8,
+            "auc": null,
+            "umbral": 0.557073,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          },
+          "Scenario-10": {
+            "accuracy": 0.998197,
+            "precision": 0.997279,
+            "recall": 0.998962,
+            "f1": 0.998119,
+            "matriz_confusion": [
+              [
+                8355,
+                21
+              ],
+              [
+                8,
+                7696
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 7704,
+            "n_alertas": 7717,
+            "auc": 0.999967,
+            "umbral": 0.292033,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          },
+          "Scenario-2": {
+            "accuracy": 0.998943,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "matriz_confusion": [
+              [
+                16063,
+                17
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 0,
+            "n_alertas": 17,
+            "auc": null,
+            "umbral": 0.40374,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          },
+          "Scenario-3": {
+            "accuracy": 0.593657,
+            "precision": 0.294118,
+            "recall": 0.000766,
+            "f1": 0.001528,
+            "matriz_confusion": [
+              [
+                9541,
+                12
+              ],
+              [
+                6522,
+                5
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 6527,
+            "n_alertas": 17,
+            "auc": 0.479015,
+            "umbral": 0.50374,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          },
+          "Scenario-4": {
+            "accuracy": 0.99801,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "matriz_confusion": [
+              [
+                16048,
+                32
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 0,
+            "n_alertas": 32,
+            "auc": null,
+            "umbral": 0.450407,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          },
+          "Scenario-5": {
+            "accuracy": 0.807276,
+            "precision": 0.993722,
+            "recall": 0.480438,
+            "f1": 0.647721,
+            "matriz_confusion": [
+              [
+                10132,
+                18
+              ],
+              [
+                3081,
+                2849
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 5930,
+            "n_alertas": 2867,
+            "auc": 0.725804,
+            "umbral": 0.18,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          },
+          "Scenario-6": {
+            "accuracy": 0.913744,
+            "precision": 0.794715,
+            "recall": 0.233154,
+            "f1": 0.360535,
+            "matriz_confusion": [
+              [
+                14302,
+                101
+              ],
+              [
+                1286,
+                391
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 1677,
+            "n_alertas": 492,
+            "auc": 0.661885,
+            "umbral": 0.04,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          },
+          "Scenario-7": {
+            "accuracy": 0.999502,
+            "precision": 0.975309,
+            "recall": 1.0,
+            "f1": 0.9875,
+            "matriz_confusion": [
+              [
+                15756,
+                8
+              ],
+              [
+                0,
+                316
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 316,
+            "n_alertas": 324,
+            "auc": 1.0,
+            "umbral": 0.46374,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          },
+          "Scenario-8": {
+            "accuracy": 0.756095,
+            "precision": 0.940921,
+            "recall": 0.219364,
+            "f1": 0.355782,
+            "matriz_confusion": [
+              [
+                11075,
+                68
+              ],
+              [
+                3854,
+                1083
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 4937,
+            "n_alertas": 1151,
+            "auc": 0.651346,
+            "umbral": 0.453333,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          },
+          "Scenario-9": {
+            "accuracy": 0.991169,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "matriz_confusion": [
+              [
+                15938,
+                142
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "n_muestras": 16080,
+            "n_reales_fuga": 0,
+            "n_alertas": 142,
+            "auc": null,
+            "umbral": 0.113333,
+            "pasos_calibracion": 1440,
+            "n_calibracion": 1440
+          }
+        }
+      }
+    },
+    "base_siempre_normal": 0.845371,
+    "meta_exactitud": 0.8,
+    "meta_cumplida_A": true,
+    "meta_cumplida_B": true,
+    "f1_minimo": 0.5,
+    "f1_alcanzado": true
+  }
+}
