@@ -7,6 +7,9 @@
 # ---------------------------------------------------------------------------
 data/
 
+# Dataset demo para Streamlit Cloud (ligero, ~1 MB)
+!demo_data/
+
 # Artefactos de modelos (se regeneran con train.py)
 models/
 *.joblib
@@ -17,6 +20,9 @@ models/
 logs/*.csv
 logs/*.jsonl
 logs/*.json
+!logs/train_report.json
+!logs/evaluation_report.json
+!logs/phase3_results.json
 
 # Informes de inspeccion de datos
 logs/data_inspection.json

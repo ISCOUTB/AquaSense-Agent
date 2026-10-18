@@ -35,14 +35,53 @@ def load_model_bundle():
         bundle.get("percentil_calibracion", 99.9)
     )
 
-@st.cache_resource
-def load_dataset_cached():
-    """Carga el dataset LeakDB (solo para demo)."""
+def load_full_dataset():
+    """Intenta cargar el dataset completo LeakDB."""
     try:
         from data_loader import load_dataset
-        return load_dataset(Path("data"))
-    except Exception:
-        return None
+        data_path = Path("data")
+        if data_path.exists() and any(data_path.iterdir()):
+            return load_dataset(data_path)
+    except Exception as e:
+        st.warning(f"No se pudo cargar dataset completo: {e}")
+    return None
+
+def load_demo_dataset():
+    """Carga el dataset demo ligero (Scenario-7, 2000 pasos)."""
+    try:
+        demo_dir = Path("demo_data")
+        if not (demo_dir / "X_demo.csv").exists():
+            return None
+        X = pd.read_csv(demo_dir / "X_demo.csv")
+        y = pd.read_csv(demo_dir / "y_demo.csv")["leak"].values
+        scenario = pd.read_csv(demo_dir / "scenario_demo.csv")["scenario"].values
+        feature_names = list(X.columns)
+        # Namedtuple-like object
+        class DemoDS:
+            pass
+        ds = DemoDS()
+        ds.X = X
+        ds.y_int = y
+        ds.scenario = scenario
+        ds.feature_names = feature_names
+        return ds
+    except Exception as e:
+        st.warning(f"No se pudo cargar dataset demo: {e}")
+    return None
+
+@st.cache_resource
+def load_dataset_cached():
+    """Carga dataset: completo si existe, sino demo."""
+    ds = load_full_dataset()
+    if ds is not None:
+        st.sidebar.info("📊 Usando dataset completo (LeakDB)")
+        return ds
+    ds = load_demo_dataset()
+    if ds is not None:
+        st.sidebar.warning("⚠️ Usando dataset DEMO (solo Scenario-7, 2000 pasos)")
+        return ds
+    st.sidebar.error("❌ No hay datos disponibles")
+    return None
 
 @st.cache_resource
 def load_reports():
@@ -67,6 +106,13 @@ st.sidebar.title("⚙️ Configuración")
 # Verificar que el modelo existe
 if model is None:
     st.sidebar.error("❌ Modelo no encontrado. Ejecuta `python train.py` primero.")
+    st.stop()
+
+st.sidebar.success(f"✅ Modelo cargado ({len(features)} features)")
+
+# Verificar datos
+if ds is None:
+    st.sidebar.error("❌ No hay datos. Ejecuta `python inspect_data.py` o incluye demo_data/")
     st.stop()
 
 st.sidebar.success(f"✅ Modelo cargado ({len(features)} features)")
