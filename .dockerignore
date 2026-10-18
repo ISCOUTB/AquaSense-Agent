@@ -2,7 +2,6 @@
 
 # Datos (se descargan en build)
 data/
-demo_data/
 
 # Modelos y logs (se generan en build)
 models/

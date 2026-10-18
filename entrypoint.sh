@@ -1,24 +1,22 @@
 #!/bin/bash
 # Entrypoint para AquaSense-Agent Docker
-# Modos: streamlit (default) | train | evaluate | agent | bash
+# Modos: train | evaluate | agent | bash
 
 set -euo pipefail
 
 echo "=========================================="
 echo "  🌊 AquaSense-Agent Docker Runtime"
 echo "=========================================="
-echo "Modo: ${1:-streamlit}"
+echo "Modo: ${1:-train}"
 echo "Directorio: $(pwd)"
 echo ""
 
 # Verificar/Crear directorios necesarios
-mkdir -p /app/data /app/models /app/logs /app/demo_data
+mkdir -p /app/data /app/models /app/logs
 
-# Función: verificar si hay dataset completo
+# Función: verificar si hay dataset completo (estructura Scenario-N/)
 check_full_dataset() {
-    [ -f "/app/data/Nodes.csv" ] && \
-    [ -f "/app/data/Pipes.csv" ] && \
-    [ -f "/app/data/Labels.csv" ]
+    find /app/data -maxdepth 2 -name "Scenario-*" -type d 2>/dev/null | grep -q .
 }
 
 # Función: verificar si hay modelo entrenado
@@ -42,17 +40,10 @@ evaluate_model() {
 # Verificar datos
 if check_full_dataset; then
     echo "📊 Dataset completo detectado: /app/data/"
-    export AQUASENSE_DEMO_MODE=0
 else
-    echo "⚠️  Dataset completo NO encontrado"
-    if [ -f "/app/demo_data/X_demo.csv" ]; then
-        echo "📦 Usando dataset DEMO (Scenario-7, 2000 pasos)"
-        export AQUASENSE_DEMO_MODE=1
-    else
-        echo "❌ ERROR: Ni dataset completo ni demo_data/"
-        echo "   Ejecuta: docker compose build  (para descargar LeakDB)"
-        exit 1
-    fi
+    echo "❌ ERROR: Dataset completo NO encontrado en /app/data/"
+    echo "   El build debería haber descargado LeakDB automáticamente."
+    exit 1
 fi
 
 # Verificar modelo
@@ -64,20 +55,10 @@ else
 fi
 
 # Parsear modo
-MODE="${1:-streamlit}"
+MODE="${1:-train}"
 shift || true
 
 case "$MODE" in
-    streamlit)
-        echo "🚀 Iniciando Streamlit en http://0.0.0.0:8501"
-        echo "   Abre en navegador: http://localhost:8501"
-        exec streamlit run streamlit_app.py \
-            --server.address=0.0.0.0 \
-            --server.port=8501 \
-            --server.headless=true \
-            --browser.gatherUsageStats=false
-        ;;
-
     train)
         echo "🔧 Re-entrenando modelo completo..."
         train_model
@@ -99,7 +80,7 @@ case "$MODE" in
 
     *)
         echo "❓ Modo desconocido: $MODE"
-        echo "Modos disponibles: streamlit | train | evaluate | agent | bash"
+        echo "Modos disponibles: train | evaluate | agent | bash"
         exit 1
         ;;
 esac

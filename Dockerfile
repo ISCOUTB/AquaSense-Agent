@@ -66,10 +66,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --from=builder /app/models /app/models
 COPY --from=builder /app/logs /app/logs
 COPY --from=builder /app/data /app/data
-COPY --from=builder /app/demo_data /app/demo_data
 
-# Copiar código Python necesario
-COPY --from=builder /app/streamlit_app.py /app/
+# Copiar código Python necesario (sin Streamlit)
 COPY --from=builder /app/agent.py /app/
 COPY --from=builder /app/data_loader.py /app/
 COPY --from=builder /app/evaluate.py /app/
@@ -81,15 +79,8 @@ COPY --from=builder /app/inspect_data.py /app/
 COPY --from=builder /app/entrypoint.sh /app/
 RUN chmod +x /app/entrypoint.sh
 
-# Puerto Streamlit
-EXPOSE 8501
-
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
-
 # Entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
 
-# Default command
-CMD ["streamlit"]
+# Default command: entrenar si no hay modelo, sino evaluar
+CMD ["train"]

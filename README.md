@@ -521,32 +521,31 @@ La forma más sencilla de ejecutar el proyecto completo **desde cero**, con el d
 git clone https://github.com/LuisFelipe634/AquaSense-Agent.git
 cd AquaSense-Agent
 
-# 2. Build + Run (descarga LeakDB ~505 MB, entrena modelo, lanza UI)
+# 2. Build + Run (descarga LeakDB, entrena modelo, evalúa)
 docker compose up --build
-
-# 3. Abrir en navegador: http://localhost:8501
 ```
 
 **Lo que hace automáticamente:**
-- Descarga LeakDB Hanoi_CMH desde GitHub KIOS-Research (~505 MB)
-- Instala dependencias (pandas, numpy, scikit-learn, streamlit, etc.)
+- Descarga LeakDB Hanoi_CMH desde GitHub KIOS-Research (~76 MB ZIP)
+- Extrae preservando estructura `Scenario-N/Pressures/`, `Flows/`, `Demands/`, `Labels.csv`
+- Instala dependencias (pandas, numpy, scikit-learn, etc.)
 - Entrena modelo RandomForest (LOSO 10 folds, `balance=none`)
-- Lanza Streamlit con 3 modos: Demo live, Métricas oficiales, Batch CSV
+- Evalúa métricas oficiales (Escenarios A, B, C)
 
 **Comandos útiles:**
 
 | Comando | Qué hace |
 |---------|----------|
-| `docker compose up` | Levanta la app (usa cache si no cambió nada) |
-| `docker compose up --build` | Fuerza rebuild completo |
-| `docker compose --profile training up aquasense-train` | Re-entrena modelo |
-| `docker compose --profile evaluation up aquasense-eval` | Evalúa métricas |
+| `docker compose up --build` | Build completo + entrena + evalúa |
+| `docker compose up` | Re-ejecutar (usa cache si no cambió nada) |
+| `docker compose up aquasense-train` | Re-entrenar modelo |
+| `docker compose up aquasense-eval` | Evaluar métricas |
 | `docker compose run --rm aquasense bash` | Shell interactivo en contenedor |
 | `docker compose down -v` | Limpia todo (incluye volúmenes) |
 
 **Arquitectura multi-stage:**
 - **Builder**: Python 3.11 + wget/unzip → descarga LeakDB → entrena modelo
-- **Runtime**: Python 3.11 slim (~100 MB) → solo artefactos + Streamlit
+- **Runtime**: Python 3.11 slim (~100 MB) → solo artefactos + CLI
 
 **Volúmenes persistentes:** `aquasense_models` y `aquasense_logs` sobreviven a `docker compose down`.
 
