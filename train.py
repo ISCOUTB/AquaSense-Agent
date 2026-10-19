@@ -345,13 +345,13 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Entrena el detector de fugas de AquaSense-Agent.")
     p.add_argument("--data-dir", type=Path, default=Path("data"))
     p.add_argument("--n-estimators", type=int, default=150)
-    p.add_argument("--balance", choices=["none", "class_weight"], default="none",
-                   help="Ponderar las clases. 'none' es el valor por defecto porque "
-                        "medido en este dataset 'balanced' EMPEORA el modelo: AUC "
-                        "0,7638 sin ponderar frente a 0,7031 con 'balanced', y 152 "
-                        "falsas alarmas frente a 29.918 en el escenario A. Con 15,46% "
-                        "de positivos, 'balanced' infla la clase 1 y el bosque "
-                        "aprende un criterio peor.")
+    p.add_argument("--balance", choices=["none", "class_weight"], default="none")
+                   #help="Ponderar las clases. 'none' es el valor por defecto porque "
+                   #     "medido en este dataset 'balanced' EMPEORA el modelo: AUC "
+                   #     "0,7638 sin ponderar frente a 0,7031 con 'balanced', y 152 "
+                   #     "falsas alarmas frente a 29.918 en el escenario A. Con 15,46% "
+                   #     "de positivos, 'balanced' infla la clase 1 y el bosque "
+                   #     "aprende un criterio peor.")
     p.add_argument("--beta", type=float, default=1.0,
                    help="F-beta para elegir el umbral fijo. beta>1 prioriza recall.")
     p.add_argument("--percentil-calibracion", type=float, default=0.0,
