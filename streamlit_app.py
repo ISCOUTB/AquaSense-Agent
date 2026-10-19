@@ -364,7 +364,7 @@ if modo == "🎯 Demo: Scenario-7 (calibrado + evaluación)":
 
         status_placeholder.success(
             f"✅ Calibrado: umbral = **{cal_result['umbral_adaptado']:.4f}** "
-            f"(percentil {cal_result['percentil']}, n={cal_result['n_observaciones']})"
+            f"(percentil {cal_result['periodil']}, n={cal_result['n_observaciones']})"
         )
 
         # Evaluación paso a paso
