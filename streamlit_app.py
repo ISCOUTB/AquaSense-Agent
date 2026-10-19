@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 from datetime import datetime
 
-from dataset_manager import dataset_is_ready, download_dataset
+from dataset_manager import dataset_is_ready, download_dataset, download_model
 
 ROOT = Path(__file__).resolve().parent
 OPERATION_LOCK = threading.Lock()
@@ -185,7 +185,43 @@ if panel == "Ejecutar programa":
     if model_path.is_file():
         st.success(f"Modelo disponible: `{model_path}`")
     else:
-        st.warning(f"Modelo aún no existe; se creará aquí al ejecutar train: `{model_path}`")
+        st.warning(f"Modelo aún no existe; intenta descargarlo o entrenarlo. Se guardará aquí: `{model_path}`")
+    model_download_label = (
+        "⬇️ Descargar y reemplazar el modelo preentrenado (~143 MB)"
+        if model_path.is_file()
+        else "⬇️ Descargar modelo preentrenado (~143 MB)"
+    )
+    if st.button(model_download_label):
+        if not OPERATION_LOCK.acquire(blocking=False):
+            st.warning("Ya hay otra operación en curso. Espera a que termine.")
+        else:
+            try:
+                progress_bar = st.progress(0)
+                progress_label = st.empty()
+
+                def update_model_progress(received: int, total: int | None) -> None:
+                    received_mb = received / (1024 * 1024)
+                    if total:
+                        progress_bar.progress(min(received / total, 1.0))
+                        progress_label.caption(
+                            f"Descargando modelo: {received_mb:.1f} / "
+                            f"{total / (1024 * 1024):.1f} MB"
+                        )
+                    else:
+                        progress_label.caption(f"Descargados: {received_mb:.1f} MB")
+
+                with st.spinner("Descargando modelo preentrenado desde Google Drive…"):
+                    downloaded = download_model(model_path, update_model_progress)
+                load_model_bundle.clear()
+                st.success(
+                    f"Modelo guardado en `{model_path}` "
+                    f"({downloaded / (1024 * 1024):.1f} MB)."
+                )
+                st.rerun()
+            except (OSError, ValueError) as error:
+                st.error(f"No se pudo descargar el modelo: {error}")
+            finally:
+                OPERATION_LOCK.release()
 
     if st.button("▶️ Ejecutar", type="primary"):
         if not dataset_is_ready(data_dir):

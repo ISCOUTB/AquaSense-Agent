@@ -15,6 +15,75 @@ DATASET_URL = (
 SCENARIOS = tuple(f"Scenario-{number}" for number in range(1, 11))
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
+MODEL_URL = (
+    "https://drive.usercontent.google.com/download?"
+    "id=1PAQIoRc9BMTbfjXzB-JVdqh9V157c0Po&export=download&confirm=t"
+)
+
+
+def download_model(
+    model_path: Path,
+    progress_callback: Callable[[int, int | None], None] | None = None,
+) -> int:
+    """Download the pre-trained joblib model and atomically install it."""
+    model_path = model_path.resolve()
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    request = urllib.request.Request(
+        MODEL_URL,
+        headers={"User-Agent": "AquaSense-Agent/1.0"},
+    )
+    temporary_path: Path | None = None
+    downloaded = 0
+
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            content_type = response.headers.get("Content-Type", "").lower()
+            content_disposition = response.headers.get("Content-Disposition", "").lower()
+            content_length = response.headers.get("Content-Length")
+            total = int(content_length) if content_length and content_length.isdigit() else None
+
+            if "text/html" in content_type or "leak_classifier.joblib" not in content_disposition:
+                raise ValueError(
+                    "Google Drive no devolvió el archivo leak_classifier.joblib. "
+                    "Comprueba que el enlace sea público y que no requiera confirmación."
+                )
+            available_space = shutil.disk_usage(model_path.parent).free
+            if total is not None and available_space < total:
+                raise OSError(
+                    f"Espacio insuficiente para descargar el modelo: se requieren "
+                    f"{total:,} bytes y hay {available_space:,} disponibles."
+                )
+
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                prefix=f".{model_path.name}.",
+                suffix=".download",
+                dir=model_path.parent,
+                delete=False,
+            ) as temporary_file:
+                temporary_path = Path(temporary_file.name)
+                first_chunk = True
+                while chunk := response.read(DOWNLOAD_CHUNK_SIZE):
+                    if first_chunk:
+                        first_chunk = False
+                        if chunk.lstrip().lower().startswith((b"<!doctype html", b"<html")):
+                            raise ValueError("Google Drive devolvió una página HTML, no el modelo.")
+                    temporary_file.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback is not None:
+                        progress_callback(downloaded, total)
+
+        if downloaded == 0:
+            raise ValueError("El archivo de modelo descargado está vacío.")
+        if total is not None and downloaded != total:
+            raise OSError(f"Descarga incompleta: llegaron {downloaded} de {total} bytes.")
+
+        temporary_path.replace(model_path)
+        return downloaded
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
 
 def dataset_is_ready(data_dir: Path) -> bool:
     """Return whether all ten scenarios have the structure required by the app."""
