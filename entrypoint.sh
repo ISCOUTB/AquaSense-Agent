@@ -1,6 +1,6 @@
 #!/bin/bash
 # Entrypoint para AquaSense-Agent Docker
-# Modos: train | evaluate | agent | bash
+# Modos: train | evaluate | agent | streamlit | bash
 
 set -euo pipefail
 
@@ -13,6 +13,14 @@ echo ""
 
 # Verificar/Crear directorios necesarios
 mkdir -p /app/data /app/models /app/logs
+
+# Named Docker/Azure volumes mask image contents; seed them on first startup.
+if [ ! -f /app/models/leak_classifier.joblib ] && [ -f /app/model-seed/leak_classifier.joblib ]; then
+    cp -a /app/model-seed/. /app/models/
+fi
+if [ ! -f /app/logs/train_report.json ] && [ -d /app/log-seed ]; then
+    cp -a /app/log-seed/. /app/logs/
+fi
 
 # Función: verificar si hay dataset completo (estructura Scenario-N/)
 check_full_dataset() {
@@ -73,6 +81,14 @@ case "$MODE" in
         exec python agent.py "$@"
         ;;
 
+    streamlit)
+        echo "🌐 Iniciando interfaz Streamlit en el puerto 8501..."
+        exec streamlit run /app/streamlit_app.py \
+            --server.address=0.0.0.0 \
+            --server.port=8501 \
+            --server.headless=true
+        ;;
+
     bash|sh)
         echo "🐚 Entrando a shell interactivo..."
         exec /bin/bash
@@ -80,7 +96,7 @@ case "$MODE" in
 
     *)
         echo "❓ Modo desconocido: $MODE"
-        echo "Modos disponibles: train | evaluate | agent | bash"
+        echo "Modos disponibles: train | evaluate | agent | streamlit | bash"
         exit 1
         ;;
 esac

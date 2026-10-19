@@ -540,6 +540,7 @@ docker compose up --build
 | `docker compose up` | Re-ejecutar (usa cache si no cambió nada) |
 | `docker compose up aquasense-train` | Re-entrenar modelo |
 | `docker compose up aquasense-eval` | Evaluar métricas |
+| `docker compose up aquasense-web` | Abrir Streamlit en `http://localhost:8501` |
 | `docker compose run --rm aquasense bash` | Shell interactivo en contenedor |
 | `docker compose down -v` | Limpia todo (incluye volúmenes) |
 
@@ -548,6 +549,57 @@ docker compose up --build
 - **Runtime**: Python 3.11 slim (~100 MB) → solo artefactos + CLI
 
 **Volúmenes persistentes:** `aquasense_models` y `aquasense_logs` sobreviven a `docker compose down`.
+
+### Interfaz Streamlit
+
+También se puede ejecutar directamente en un entorno Python con:
+
+```bash
+python -m pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+En el menú lateral, **Ejecutar programa** permite descargar y extraer Hanoi_CMH
+y ejecutar todo el pipeline o solo `inspect`, `train`, `evaluate` o `agent`.
+Para `agent`, se puede elegir un escenario o los diez; en este último caso se
+crea un CSV de eventos y un JSON de resumen por escenario. La descarga se guarda
+en `data/`; el modelo entrenado en `models/leak_classifier.joblib`; y los logs
+completos de ejecución iniciada desde Streamlit en `logs/streamlit_runs/`.
+La salida visible muestra las últimas 100 líneas, y el botón de descarga permite
+obtener el registro completo.
+
+La sección **Demo y análisis** sirve para explorar la demo interactiva, consultar
+métricas ya calculadas y puntuar un CSV propio. No ejecuta el entrenamiento; para
+ello usa la sección **Ejecutar programa**.
+
+El modelo no se incluye en Git (`models/` está excluida); se genera al entrenar:
+
+```bash
+python main.py --solo train
+```
+
+La demo carga exactamente `models/leak_classifier.joblib` desde el directorio del
+repositorio. En Docker, los volúmenes de modelos e informes se inicializan desde
+los artefactos de la imagen cuando todavía no tienen contenido.
+
+Al usar Docker, el volumen montado en `/app/models` oculta inicialmente los
+archivos de modelo incluidos en la imagen. El entrypoint copia el modelo y los
+informes iniciales a los volúmenes persistentes solo cuando están vacíos.
+
+Para ejecutar el agente sobre todos los escenarios desde la CLI:
+
+```bash
+python main.py --solo agent --todos-escenarios
+```
+
+Añade `--limite 2000` para procesar solo las primeras 2 000 observaciones por
+escenario. La interfaz Streamlit expone el mismo selector.
+
+La descarga requiere unos 76 MB para el ZIP y alrededor
+de 500 MB para el dataset extraído. En un despliegue en la nube, configura
+almacenamiento persistente (por ejemplo, un volumen Azure Files) si quieres
+conservar datos y resultados tras reinicios o reemplazos del contenedor;
+comprueba además la memoria y CPU disponibles para entrenar.
 
 ---
 

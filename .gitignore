@@ -18,6 +18,7 @@ models/
 # Salidas de ejecucion: logs de agente, metricas e informes de inspeccion.
 # Se regeneran ejecutando el proyecto.
 logs/*.csv
+logs/streamlit_runs/
 logs/*.jsonl
 logs/*.json
 !logs/train_report.json

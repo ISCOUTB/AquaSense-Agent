@@ -7,8 +7,18 @@ import pandas as pd
 import numpy as np
 import joblib
 import json
+import os
+import subprocess
+import sys
+import threading
+import zipfile
 from pathlib import Path
 from datetime import datetime
+
+from dataset_manager import dataset_is_ready, download_dataset
+
+ROOT = Path(__file__).resolve().parent
+OPERATION_LOCK = threading.Lock()
 
 # Configuración de página
 st.set_page_config(
@@ -24,7 +34,7 @@ st.set_page_config(
 @st.cache_resource
 def load_model_bundle():
     """Carga el bundle del modelo entrenado."""
-    bundle_path = Path("models/leak_classifier.joblib")
+    bundle_path = ROOT / "models" / "leak_classifier.joblib"
     if not bundle_path.exists():
         return None, None, None, None
     bundle = joblib.load(bundle_path)
@@ -39,7 +49,7 @@ def load_full_dataset():
     """Intenta cargar el dataset completo LeakDB."""
     try:
         from data_loader import load_dataset
-        data_path = Path("data")
+        data_path = ROOT / "data"
         if data_path.exists() and any(data_path.iterdir()):
             return load_dataset(data_path)
     except Exception as e:
@@ -49,7 +59,7 @@ def load_full_dataset():
 def load_demo_dataset():
     """Carga el dataset demo ligero (Scenario-7, 2000 pasos)."""
     try:
-        demo_dir = Path("demo_data")
+        demo_dir = ROOT / "demo_data"
         if not (demo_dir / "X_demo.csv").exists():
             return None
         X = pd.read_csv(demo_dir / "X_demo.csv")
@@ -88,10 +98,170 @@ def load_reports():
     """Carga reportes de métricas."""
     reports = {}
     for name in ["train_report.json", "evaluation_report.json"]:
-        p = Path("logs") / name
+        p = ROOT / "logs" / name
         if p.exists():
             reports[name] = json.loads(p.read_text(encoding="utf-8"))
     return reports
+
+# -----------------------------------------------------------------------------
+# Panel de ejecución y descarga
+# -----------------------------------------------------------------------------
+panel = st.sidebar.radio(
+    "Sección",
+    ["Demo y análisis", "Ejecutar programa"],
+    index=1,
+    key="main_section",
+)
+
+if panel == "Ejecutar programa":
+    st.title("⚙️ Ejecutar AquaSense-Agent")
+    st.caption("Descarga LeakDB y ejecuta el pipeline completo o una fase individual.")
+    data_dir = ROOT / "data"
+
+    if dataset_is_ready(data_dir):
+        st.success("Dataset Hanoi_CMH completo disponible en `data/`.")
+    else:
+        st.warning(
+            "No se encuentra el dataset completo. La descarga ocupa aproximadamente "
+            "76 MB y la extracción alrededor de 500 MB."
+        )
+        if st.button("⬇️ Descargar y extraer Hanoi_CMH", type="primary"):
+            if not OPERATION_LOCK.acquire(blocking=False):
+                st.warning("Ya hay otra operación en curso. Espera a que termine.")
+            else:
+                try:
+                    progress_bar = st.progress(0)
+                    progress_label = st.empty()
+
+                    def update_download_progress(received: int, total: int | None) -> None:
+                        received_mb = received / (1024 * 1024)
+                        if total:
+                            progress_bar.progress(min(received / total, 1.0))
+                            total_mb = total / (1024 * 1024)
+                            progress_label.caption(
+                                f"Descargando: {received_mb:.1f} / {total_mb:.1f} MB"
+                            )
+                        else:
+                            progress_label.caption(f"Descargados: {received_mb:.1f} MB")
+
+                    with st.spinner("Descargando y extrayendo dataset…"):
+                        downloaded = download_dataset(data_dir, update_download_progress)
+                    load_dataset_cached.clear()
+                    load_model_bundle.clear()
+                    st.success(f"Dataset listo. Descargados {downloaded / (1024 * 1024):.1f} MB.")
+                    st.rerun()
+                except (OSError, ValueError, zipfile.BadZipFile) as error:
+                    st.error(f"No se pudo descargar o extraer el dataset: {error}")
+                finally:
+                    OPERATION_LOCK.release()
+
+    st.divider()
+    action = st.selectbox(
+        "Qué ejecutar",
+        ["Todo", "Solo inspect", "Solo train", "Solo evaluate", "Solo agent"],
+    )
+    scenario = st.selectbox(
+        "Escenario del agente",
+        ["Todos los escenarios"] + [f"Scenario-{number}" for number in range(1, 11)],
+        index=10,
+        help="Ejecuta el agente en cada escenario y guarda un CSV/JSON separado.",
+    )
+    limit_agent = st.checkbox("Limitar observaciones del agente", value=True)
+    agent_limit = None
+    if limit_agent:
+        agent_limit = st.number_input(
+            "Número máximo de observaciones",
+            min_value=1,
+            max_value=17_520,
+            value=2_000,
+            step=100,
+        )
+
+    st.info(
+        "El entrenamiento LOSO puede tardar varios minutos y requiere CPU y memoria. "
+        "La descarga y los artefactos se guardan en el disco local del proceso."
+    )
+    model_path = ROOT / "models" / "leak_classifier.joblib"
+    if model_path.is_file():
+        st.success(f"Modelo disponible: `{model_path}`")
+    else:
+        st.warning(f"Modelo aún no existe; se creará aquí al ejecutar train: `{model_path}`")
+
+    if st.button("▶️ Ejecutar", type="primary"):
+        if not dataset_is_ready(data_dir):
+            st.error("Primero descarga el dataset completo.")
+        elif action in {"Solo evaluate", "Solo agent"} and not (
+            ROOT / "models" / "leak_classifier.joblib"
+        ).exists():
+            st.error("No se encontró el modelo. Ejecuta primero `Solo train`.")
+        elif not OPERATION_LOCK.acquire(blocking=False):
+            st.warning("Ya hay otra operación en curso. Espera a que termine.")
+        else:
+            command = [sys.executable, str(ROOT / "main.py")]
+            if action != "Todo":
+                command.extend(["--solo", action.removeprefix("Solo ").lower()])
+            if action in {"Todo", "Solo agent"}:
+                if scenario == "Todos los escenarios":
+                    command.append("--todos-escenarios")
+                else:
+                    command.extend(["--escenario", scenario])
+                if agent_limit is not None:
+                    command.extend(["--limite", str(int(agent_limit))])
+
+            run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+            run_logs = ROOT / "logs" / "streamlit_runs"
+            run_logs.mkdir(parents=True, exist_ok=True)
+            output_path = run_logs / f"{run_id}_{action.lower().replace(' ', '_')}.log"
+            output_tail: list[str] = []
+            output_view = st.empty()
+            status = st.status(f"Ejecutando: {action}…", expanded=True)
+            try:
+                process = subprocess.Popen(
+                    command,
+                    cwd=ROOT,
+                    env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    bufsize=1,
+                )
+                if process.stdout is None:
+                    raise OSError("No se pudo capturar la salida del proceso.")
+
+                with output_path.open("w", encoding="utf-8") as log_file:
+                    for line_number, line in enumerate(process.stdout, start=1):
+                        log_file.write(line)
+                        log_file.flush()
+                        output_tail.append(line)
+                        if len(output_tail) > 100:
+                            output_tail.pop(0)
+                        if line_number % 10 == 0:
+                            output_view.code("".join(output_tail))
+                return_code = process.wait()
+                output_view.code("".join(output_tail) or "El proceso no generó salida.")
+                if return_code == 0:
+                    status.update(label=f"{action}: completado", state="complete")
+                    st.success("Ejecución completada.")
+                    st.cache_resource.clear()
+                else:
+                    status.update(label=f"{action}: error (código {return_code})", state="error")
+                    st.error(f"El proceso terminó con código {return_code}. Revisa la salida.")
+                st.caption(f"Registro completo guardado en `{output_path.relative_to(ROOT)}`.")
+                st.download_button(
+                    "⬇️ Descargar salida completa",
+                    data=output_path.read_bytes(),
+                    file_name=output_path.name,
+                    mime="text/plain",
+                )
+            except OSError as error:
+                status.update(label="No se pudo iniciar el proceso", state="error")
+                st.error(f"Error al iniciar el programa: {error}")
+            finally:
+                OPERATION_LOCK.release()
+
+    st.stop()
 
 # Cargar recursos
 model, features, default_umbral, default_pct = load_model_bundle()
@@ -103,21 +273,23 @@ reports = load_reports()
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚙️ Configuración")
 
-# Verificar que el modelo existe
 if model is None:
-    st.sidebar.error("❌ Modelo no encontrado. Ejecuta `python train.py` primero.")
-    st.stop()
-
-st.sidebar.success(f"✅ Modelo cargado ({len(features)} features)")
-
-# Verificar datos
+    st.sidebar.warning(
+        f"No se encontró el modelo en `{ROOT / 'models' / 'leak_classifier.joblib'}`. "
+        "Para usar la demo o scoring, descárgalo/entrena desde «Ejecutar programa»."
+    )
+else:
+    st.sidebar.success(f"✅ Modelo cargado desde `models/leak_classifier.joblib` ({len(features)} features)")
 if ds is None:
-    st.sidebar.error("❌ No hay datos. Ejecuta `python inspect_data.py` o incluye demo_data/")
-    st.stop()
-
-st.sidebar.success(f"✅ Modelo cargado ({len(features)} features)")
+    st.sidebar.warning("No hay dataset completo ni demo_data disponible.")
+else:
+    st.sidebar.success("✅ Datos disponibles")
 
 # Modo de operación
+st.sidebar.caption(
+    "Esta sección es para usar el modelo ya entrenado; entrenamiento e inspección "
+    "se ejecutan desde «Ejecutar programa»."
+)
 modo = st.sidebar.radio(
     "Modo de operación",
     [
@@ -143,20 +315,16 @@ pct_calib = st.sidebar.slider(
 )
 
 # -----------------------------------------------------------------------------
-# Importar agente (después de verificar modelo)
-# -----------------------------------------------------------------------------
-from agent import LeakDetectionAgent
-
-# -----------------------------------------------------------------------------
 # MODO 1: DEMO SCENARIO-7
 # -----------------------------------------------------------------------------
 if modo == "🎯 Demo: Scenario-7 (calibrado + evaluación)":
     st.title("🌊 AquaSense-Agent — Demo en Vivo")
     st.caption("Escenario 7: Fuga grande (nodo 28), calibración con 30 días limpios, evaluación en tiempo real")
 
-    if ds is None:
-        st.error("Dataset no disponible. Verifica carpeta `data/`.")
+    if model is None or ds is None:
+        st.error("Esta demo requiere un modelo entrenado y un dataset disponible.")
         st.stop()
+    from agent import LeakDetectionAgent
 
     # Preparar datos Scenario-7
     mask_7 = (ds.scenario == "Scenario-7").to_numpy() if hasattr(ds.scenario, 'to_numpy') else (ds.scenario == "Scenario-7")
@@ -182,7 +350,7 @@ if modo == "🎯 Demo: Scenario-7 (calibrado + evaluación)":
     if st.button("▶️ Iniciar Demo", type="primary", use_container_width=True):
         # Crear agente y calibrar
         agent = LeakDetectionAgent(
-            model_path="models/leak_classifier.joblib",
+            model_path=ROOT / "models" / "leak_classifier.joblib",
             percentil=pct_calib
         )
 
@@ -422,6 +590,10 @@ elif modo == "📊 Ver métricas oficiales (Fase 2/3)":
 else:
     st.title("📁 Batch Scoring — Subir CSV")
     st.caption("Sube un archivo CSV con observaciones para obtener probabilidad de fuga por fila.")
+    if model is None:
+        st.error("El scoring requiere un modelo entrenado. Usa «Ejecutar programa» → «Solo train».")
+        st.stop()
+    from agent import LeakDetectionAgent
 
     st.markdown("""
     **Formato esperado:** CSV con columnas:
@@ -447,7 +619,7 @@ else:
 
             # Crear agente
             agent = LeakDetectionAgent(
-                model_path="models/leak_classifier.joblib",
+                model_path=ROOT / "models" / "leak_classifier.joblib",
                 percentil=pct_calib
             )
 

@@ -12,6 +12,7 @@ cada vez que se prueba el agente.
     python main.py                    # pipeline completo
     python main.py --solo agente      # solo ejecuta el agente
     python main.py --escenario Scenario-7
+    python main.py --solo agent --todos-escenarios
 
 Por que este orden
 -----------------
@@ -65,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--data-dir", type=Path, default=Path("data"))
     p.add_argument("--escenario", default="Scenario-10",
                    help="Escenario que procesa el agente")
+    p.add_argument("--todos-escenarios", action="store_true",
+                   help="Ejecuta el agente en los 10 escenarios")
     p.add_argument("--limite", type=int, default=None,
                    help="Limita el numero de observaciones del agente")
     p.add_argument("--n-estimators", type=int, default=None,
@@ -78,9 +81,22 @@ def main(argv: list[str] | None = None) -> int:
     for paso in pasos:
         extra = list(comunes)
         if paso == "agent":
-            extra += ["--escenario", a.escenario]
-            if a.limite is not None:
-                extra += ["--limite", str(a.limite)]
+            escenarios = (
+                [f"Scenario-{number}" for number in range(1, 11)]
+                if a.todos_escenarios else [a.escenario]
+            )
+            for escenario in escenarios:
+                args_agente = extra + ["--escenario", escenario]
+                if a.limite is not None:
+                    args_agente += ["--limite", str(a.limite)]
+                if a.todos_escenarios:
+                    args_agente += [
+                        "--log", f"logs/agent_events_{escenario}.csv",
+                        "--resumen-out", f"logs/agent_run_{escenario}.json",
+                    ]
+                key = f"agent_{escenario}" if a.todos_escenarios else paso
+                tiempos[key] = ejecutar(paso, args_agente + resto)
+            continue
         if paso == "train" and a.n_estimators is not None:
             extra += ["--n-estimators", str(a.n_estimators)]
         tiempos[paso] = ejecutar(paso, extra + resto)
@@ -92,9 +108,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {paso:<10} {dt:>8.1f} s")
     print(f"  {'TOTAL':<10} {sum(tiempos.values()):>8.1f} s")
     print("\n  Artefactos generados:")
-    for art in ("models/leak_classifier.joblib", "logs/train_report.json",
-                "logs/evaluation_report.json", "logs/agent_events.csv",
-                "logs/agent_run.json", "logs/data_inspection.json"):
+    artefactos = [
+        "models/leak_classifier.joblib", "logs/train_report.json",
+        "logs/evaluation_report.json", "logs/agent_events.csv",
+        "logs/agent_run.json", "logs/data_inspection.json",
+    ]
+    if a.todos_escenarios:
+        artefactos.extend(
+            f"logs/{prefix}_{scenario}.{suffix}"
+            for scenario in (f"Scenario-{number}" for number in range(1, 11))
+            for prefix, suffix in (
+                ("agent_events", "csv"),
+                ("agent_run", "json"),
+            )
+        )
+    for art in artefactos:
         if Path(art).exists():
             print(f"    {art}")
     print("=" * 78)

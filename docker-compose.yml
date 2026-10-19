@@ -40,6 +40,22 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
 
+  # Interfaz web Streamlit
+  aquasense-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aquasense-web
+    command: ["streamlit"]
+    ports:
+      - "8501:8501"
+    volumes:
+      - aquasense_models:/app/models
+      - aquasense_logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
 volumes:
   aquasense_models:
   aquasense_logs:
@@ -48,5 +64,6 @@ volumes:
 #   docker compose up --build           # Build + train (default)
 #   docker compose up aquasense-train   # Re-entrenar
 #   docker compose up aquasense-eval    # Evaluar
+#   docker compose up aquasense-web     # Interfaz web en http://localhost:8501
 #   docker compose run --rm aquasense bash   # Shell interactivo
 #   docker compose down -v              # Limpiar todo (incluye volúmenes)

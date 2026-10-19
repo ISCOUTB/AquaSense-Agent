@@ -65,19 +65,25 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar SOLO artefactos necesarios del builder
 COPY --from=builder /app/models /app/models
 COPY --from=builder /app/logs /app/logs
+COPY --from=builder /app/models /app/model-seed
+COPY --from=builder /app/logs /app/log-seed
 COPY --from=builder /app/data /app/data
 
-# Copiar código Python necesario (sin Streamlit)
+# Copiar código Python necesario para CLI y Streamlit
 COPY --from=builder /app/agent.py /app/
 COPY --from=builder /app/data_loader.py /app/
 COPY --from=builder /app/evaluate.py /app/
 COPY --from=builder /app/train.py /app/
 COPY --from=builder /app/main.py /app/
 COPY --from=builder /app/inspect_data.py /app/
+COPY --from=builder /app/streamlit_app.py /app/
+COPY --from=builder /app/dataset_manager.py /app/
 
 # Copiar entrypoint
 COPY --from=builder /app/entrypoint.sh /app/
 RUN chmod +x /app/entrypoint.sh
+
+EXPOSE 8501
 
 # Entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
